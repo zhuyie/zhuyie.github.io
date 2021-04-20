@@ -135,7 +135,7 @@ duration = 34302.06ms
 <p>但进到std::generate_canonical内部就有点奇怪了，<strong>超过80%的时间用在求值一个变量_Ceil</strong>，猜测这就是导致Windows版本明显慢的原因：
 <img src="/images/cpp-generate-canonical-4.jpg" alt=""></p>
 <h2 id="分析">分析</h2>
-<p>对比Windows和MacOS下两份std::generate_canonical实现可知，Windows版中的_Ceil变量对应MacOS版中的__logR，都是用来确定后面的循环需要执行的次数。</p>
+<p>对比Windows和MacOS下两份std::generate_canonical实现可知，Windows版中的_Ceil变量（不精确的）对应MacOS版中的__logR，都是用来确定后面的循环需要执行的次数。</p>
 <p>Windows版中：</p>
 <div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++"><span style="color:#66d9ef">const</span> <span style="color:#66d9ef">int</span> _Ceil <span style="color:#f92672">=</span> <span style="color:#66d9ef">static_cast</span><span style="color:#f92672">&lt;</span><span style="color:#66d9ef">int</span><span style="color:#f92672">&gt;</span>(_STD ceil(<span style="color:#66d9ef">static_cast</span><span style="color:#f92672">&lt;</span>_Real<span style="color:#f92672">&gt;</span>(_Minbits) <span style="color:#f92672">/</span> _STD log2(_Rx)));
 <span style="color:#66d9ef">const</span> <span style="color:#66d9ef">int</span> _Kx   <span style="color:#f92672">=</span> _Ceil <span style="color:#f92672">&lt;</span> <span style="color:#ae81ff">1</span> <span style="color:#f92672">?</span> <span style="color:#ae81ff">1</span> <span style="color:#f92672">:</span> _Ceil;
