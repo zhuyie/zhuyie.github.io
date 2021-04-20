@@ -47,7 +47,7 @@
 			<h2 id="出错">出错</h2>
 <p>最近在试验用GPU做计算，由于日常工作在MacBook Pro上，很自然想要试下Apple的<a href="https://developer.apple.com/metal/">Metal API</a>。</p>
 <p>官方有个示例程序<a href="https://developer.apple.com/documentation/metal/basic_tasks_and_concepts/performing_calculations_on_a_gpu">Performing Calculations on a GPU</a>，很容易懂。下载示例代码到本地构建运行，完全正常。这么简单的吗？</p>
-<p>那就开始用到自己的程序中吧！因为要与CPU/OpenCL等版本进行横行对比，很自然的Metal版本也使用了command line app的形式。代码写完编译很顺利，试跑一下，结果不对。。。</p>
+<p>那就开始用到自己的程序中吧！因为要与CPU/OpenCL等版本进行横向对比，很自然的Metal版本也使用了command line app的形式。代码写完编译很顺利，试跑一下，结果不对。。。</p>
 <p>作为老程序员，遇到这种事情很淡定。即使是测试用的小程序，我也加上了错误处理相关的代码（良好的编程素养！），那看一下错误输出，查一下文档，一般都能搞定。</p>
 <p>出错的代码位置是：</p>
 <div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-objc" data-lang="objc">MTLCompileOptions<span style="color:#f92672">*</span> compileOptions <span style="color:#f92672">=</span> [MTLCompileOptions new];
@@ -75,7 +75,7 @@ If the library was generated successfully, without errors or warnings, this erro
 <p>最后，在<a href="https://developer.apple.com/documentation/metal/1433401-mtlcreatesystemdefaultdevice">MTLCreateSystemDefaultDevice</a>的说明文档上看到这么一段：</p>
 <div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-fallback" data-lang="fallback">In macOS, in order for the system to provide a default Metal device object, you must link to the CoreGraphics framework. 
 You usually need to do this explicitly if you are writing apps that don&#39;t use graphics by default, such as command line tools.
-</code></pre></div><p>在CMakeLists.txt中加上<code>target_link_libraries(estimate_pi_metal ... &quot;-framework CoreGraphics&quot;)</code>再试，世界和平了。</p>
+</code></pre></div><p>在CMakeLists.txt中加上<code>target_link_libraries(target_name ... &quot;-framework CoreGraphics&quot;)</code>再试，世界和平了。</p>
 
 		</section>
 

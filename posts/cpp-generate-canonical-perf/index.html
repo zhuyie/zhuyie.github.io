@@ -139,7 +139,7 @@ duration = 34302.06ms
 <p>Windows版中：</p>
 <div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++"><span style="color:#66d9ef">const</span> <span style="color:#66d9ef">int</span> _Ceil <span style="color:#f92672">=</span> <span style="color:#66d9ef">static_cast</span><span style="color:#f92672">&lt;</span><span style="color:#66d9ef">int</span><span style="color:#f92672">&gt;</span>(_STD ceil(<span style="color:#66d9ef">static_cast</span><span style="color:#f92672">&lt;</span>_Real<span style="color:#f92672">&gt;</span>(_Minbits) <span style="color:#f92672">/</span> _STD log2(_Rx)));
 <span style="color:#66d9ef">const</span> <span style="color:#66d9ef">int</span> _Kx   <span style="color:#f92672">=</span> _Ceil <span style="color:#f92672">&lt;</span> <span style="color:#ae81ff">1</span> <span style="color:#f92672">?</span> <span style="color:#ae81ff">1</span> <span style="color:#f92672">:</span> _Ceil;
-</code></pre></div><p>其中std::log2和std::ceil是标准库中的两个普通函数，因此会有两次function call的运行开销。</p>
+</code></pre></div><p>其中std::log2和std::ceil是标准库中的两个常规函数，因此会有两次function call的运行开销。</p>
 <p>而在MacOS版中：</p>
 <div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++"><span style="color:#66d9ef">const</span> size_t __logR <span style="color:#f92672">=</span> __log2<span style="color:#f92672">&lt;</span><span style="color:#66d9ef">uint64_t</span>, _URNG<span style="color:#f92672">::</span>max() <span style="color:#f92672">-</span> _URNG<span style="color:#f92672">::</span>min() <span style="color:#f92672">+</span> <span style="color:#66d9ef">uint64_t</span>(<span style="color:#ae81ff">1</span>)<span style="color:#f92672">&gt;::</span>value;
 <span style="color:#66d9ef">const</span> size_t __k <span style="color:#f92672">=</span> __b <span style="color:#f92672">/</span> __logR <span style="color:#f92672">+</span> (__b <span style="color:#f92672">%</span> __logR <span style="color:#f92672">!=</span> <span style="color:#ae81ff">0</span>) <span style="color:#f92672">+</span> (__b <span style="color:#f92672">==</span> <span style="color:#ae81ff">0</span>);
@@ -174,7 +174,7 @@ duration = 34302.06ms
 <h2 id="结论">结论</h2>
 <ul>
 <li>MacOS下std::generate_canonical的实现采用了模版元编程的方式进行优化，通过编译期求值的方式，使得调用伪随机数生成器之外的其它额外开销非常小。</li>
-<li>反观VC2019中的对应实现，使用了两个通用函数std::log2和std::ceil，带来了较大的额外开销，在密集调用的场景下性能很差。</li>
+<li>反观VC2019中的对应实现，使用了两个常规函数std::log2和std::ceil，带来了较大的额外开销，在密集调用的场景下性能很差。</li>
 </ul>
 
 		</section>

@@ -16,7 +16,7 @@
       <guid>https://zhuyie.github.io/posts/use-metal-in-command-line-app/</guid>
       <description>出错 最近在试验用GPU做计算，由于日常工作在MacBook Pro上，很自然想要试下Apple的Metal API。
 官方有个示例程序Performing Calculations on a GPU，很容易懂。下载示例代码到本地构建运行，完全正常。这么简单的吗？
-那就开始用到自己的程序中吧！因为要与CPU/OpenCL等版本进行横行对比，很自然的Metal版本也使用了command line app的形式。代码写完编译很顺利，试跑一下，结果不对。。。
+那就开始用到自己的程序中吧！因为要与CPU/OpenCL等版本进行横向对比，很自然的Metal版本也使用了command line app的形式。代码写完编译很顺利，试跑一下，结果不对。。。
 作为老程序员，遇到这种事情很淡定。即使是测试用的小程序，我也加上了错误处理相关的代码（良好的编程素养！），那看一下错误输出，查一下文档，一般都能搞定。
 出错的代码位置是：
 MTLCompileOptions* compileOptions = [MTLCompileOptions new]; id&amp;lt;MTLLibrary&amp;gt; lib = [device newLibraryWithSource:source options:compileOptions error:&amp;amp;error]; if (lib == nil) { NSLog(@&amp;#34;Failed to create library: %@.&amp;#34;, error); return nil; } 而对应的错误输出为：
