@@ -170,7 +170,7 @@ duration = 34302.06ms
     <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">const</span> size_t value <span style="color:#f92672">=</span> __log2_imp<span style="color:#f92672">&lt;</span>_Xp,
                                     <span style="color:#66d9ef">sizeof</span>(_UIntType) <span style="color:#f92672">*</span> __CHAR_BIT__ <span style="color:#f92672">-</span> <span style="color:#ae81ff">1</span><span style="color:#f92672">&gt;::</span>value;
 };
-</code></pre></div><p>哇，还是蛮精巧的，通过模版元编程的方式在<strong>编译期</strong>计算出了_Xp（在我们的例子中为0x100000000）的log2值，当然这里假设了_Xp仅会有一个bit为1。</p>
+</code></pre></div><p>哇，还是蛮精巧的，通过模版元编程的方式在<strong>编译期</strong>计算出了_Xp（在我们的例子中为0x100000000）的log2值，当然这里假设了_Xp为2的N次幂且N&lt;=_Rp。</p>
 <h2 id="结论">结论</h2>
 <ul>
 <li>MacOS下std::generate_canonical的实现采用了模版元编程的方式进行优化，通过编译期求值的方式，使得调用伪随机数生成器之外的其它额外开销非常小。</li>
