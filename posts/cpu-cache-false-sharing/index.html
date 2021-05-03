@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html><head>
+	<meta charset="utf-8" />
+	<meta http-equiv="X-UA-Compatible" content="IE=edge"><title>CPU Cache False Sharing - zhuyie&#39;s blog</title><meta name="viewport" content="width=device-width, initial-scale=1">
+
+	<meta property="og:image" content=""/>
+	<meta property="og:title" content="CPU Cache False Sharing" />
+<meta property="og:description" content="Memory Hierarchy, Cache Coherence, False Sharing." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://zhuyie.github.io/posts/cpu-cache-false-sharing/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2021-05-03T13:06:16&#43;08:00" />
+<meta property="article:modified_time" content="2021-05-03T13:06:16&#43;08:00" />
+
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="CPU Cache False Sharing"/>
+<meta name="twitter:description" content="Memory Hierarchy, Cache Coherence, False Sharing."/>
+<script src="https://zhuyie.github.io/js/feather.min.js"></script>
+	
+	<link href="https://zhuyie.github.io/css/fonts.css" rel="stylesheet">
+	
+	<link rel="stylesheet" type="text/css" media="screen" href="https://zhuyie.github.io/css/main.css" /><link rel="stylesheet" type="text/css" href="https://zhuyie.github.io/css/dark.css" media="(prefers-color-scheme: dark)" />
+	
+	
+</head>
+<body>
+        <div class="content"><header>
+	<div class="main">
+		<a href="https://zhuyie.github.io/">zhuyie&#39;s blog</a>
+	</div>
+	<nav>
+		
+		<a href="/">Home</a>
+		
+		<a href="/posts">All posts</a>
+		
+	</nav>
+</header>
+
+<main>
+	<article>
+		<div class="title">
+			<h1 class="title">CPU Cache False Sharing</h1>
+			<div class="meta">Posted on May 3, 2021</div>
+		</div>
+		
+
+		<section class="body">
+			<h2 id="起因">起因</h2>
+<p>一个通过<a href="https://blogs.sas.com/content/iml/2016/03/14/monte-carlo-estimates-of-pi.html">蒙特卡洛方法估算 π 值</a>的测试程序，采用了多线程的方式，其代码大致如下：</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++"><span style="color:#75715e">#include</span> <span style="color:#75715e">&#34;...&#34;</span><span style="color:#75715e">
+</span><span style="color:#75715e"></span>
+<span style="color:#66d9ef">class</span> <span style="color:#a6e22e">RandomNumber</span>
+{
+    mt19937 mt19937_;  <span style="color:#75715e">// random number generator
+</span><span style="color:#75715e"></span>    <span style="color:#66d9ef">const</span> <span style="color:#66d9ef">float</span> MT19937_FLOAT_MULTI <span style="color:#f92672">=</span> <span style="color:#ae81ff">2.3283064365386962890625e-10</span>f; <span style="color:#75715e">// (2^32-1)^-1
+</span><span style="color:#75715e"></span><span style="color:#66d9ef">public</span><span style="color:#f92672">:</span>
+    <span style="color:#66d9ef">void</span> seed(<span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">int</span> seed)
+    {
+        mt19937_.seed(seed);
+    }
+    <span style="color:#66d9ef">float</span> <span style="color:#a6e22e">operator</span>() ()
+    {
+        <span style="color:#66d9ef">return</span> mt19937_() <span style="color:#f92672">*</span> MT19937_FLOAT_MULTI;
+    }
+};
+
+<span style="color:#66d9ef">void</span> <span style="color:#a6e22e">worker</span>(<span style="color:#66d9ef">int</span> worker_id, <span style="color:#66d9ef">int64_t</span> samples, RandomNumber <span style="color:#f92672">*</span>rnd, <span style="color:#66d9ef">int64_t</span> <span style="color:#f92672">*</span>in)
+{
+    rnd<span style="color:#f92672">-&gt;</span>seed(worker_id);  <span style="color:#75715e">// seed the prng 
+</span><span style="color:#75715e"></span>    <span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">int64_t</span> i <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>; i <span style="color:#f92672">&lt;</span> samples; i<span style="color:#f92672">++</span>)
+    {
+        <span style="color:#66d9ef">float</span> x <span style="color:#f92672">=</span> (<span style="color:#f92672">*</span>rnd)();
+        <span style="color:#66d9ef">float</span> y <span style="color:#f92672">=</span> (<span style="color:#f92672">*</span>rnd)();
+        <span style="color:#66d9ef">if</span> (x<span style="color:#f92672">*</span>x <span style="color:#f92672">+</span> y<span style="color:#f92672">*</span>y <span style="color:#f92672">&lt;=</span> <span style="color:#ae81ff">1</span>)
+        {
+            (<span style="color:#f92672">*</span>in)<span style="color:#f92672">++</span>;
+        }
+    }
+}
+
+<span style="color:#66d9ef">int</span> <span style="color:#a6e22e">main</span>(<span style="color:#66d9ef">int</span> argc, <span style="color:#66d9ef">char</span><span style="color:#f92672">*</span> argv[])
+{
+    <span style="color:#66d9ef">int</span> num_threads <span style="color:#f92672">=</span> <span style="color:#ae81ff">16</span>;
+    <span style="color:#66d9ef">int64_t</span> num_samples <span style="color:#f92672">=</span> <span style="color:#ae81ff">1000000000</span>;
+    <span style="color:#75715e">// parsing command line arguments
+</span><span style="color:#75715e"></span>
+    <span style="color:#66d9ef">auto</span> start <span style="color:#f92672">=</span> system_clock<span style="color:#f92672">::</span>now();
+
+    RandomNumber<span style="color:#f92672">*</span> rnd <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> RandomNumber[num_threads];
+    <span style="color:#66d9ef">int64_t</span><span style="color:#f92672">*</span> in_points <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> <span style="color:#66d9ef">int64_t</span>[num_threads];
+
+    <span style="color:#66d9ef">int64_t</span> total_points <span style="color:#f92672">=</span> num_samples;
+    <span style="color:#66d9ef">int64_t</span> circle_points <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>;
+    vector<span style="color:#f92672">&lt;</span><span style="color:#66d9ef">thread</span><span style="color:#f92672">&gt;</span> threads;
+    <span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">int</span> i <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>; i <span style="color:#f92672">&lt;</span> num_threads; i<span style="color:#f92672">++</span>)
+    {
+        <span style="color:#66d9ef">int64_t</span> samples <span style="color:#f92672">=</span> num_samples <span style="color:#f92672">/</span> num_threads;
+        <span style="color:#66d9ef">if</span> (i <span style="color:#f92672">==</span> num_threads <span style="color:#f92672">-</span> <span style="color:#ae81ff">1</span>)
+        {
+            samples <span style="color:#f92672">+=</span> num_samples <span style="color:#f92672">-</span> samples <span style="color:#f92672">*</span> num_threads;
+        }
+        threads.emplace_back(worker, i, samples, <span style="color:#f92672">&amp;</span>(rnd[i]), <span style="color:#f92672">&amp;</span>(in_points[i]));
+    }
+    <span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">int</span> i <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>; i <span style="color:#f92672">&lt;</span> num_threads; i<span style="color:#f92672">++</span>)
+    {
+        threads[i].join();
+        circle_points <span style="color:#f92672">+=</span> in_points[i];
+    }
+
+    <span style="color:#66d9ef">double</span> pi <span style="color:#f92672">=</span> <span style="color:#ae81ff">4</span> <span style="color:#f92672">*</span> circle_points <span style="color:#f92672">/</span> (<span style="color:#66d9ef">double</span>)total_points;
+    <span style="color:#66d9ef">double</span> pi_true <span style="color:#f92672">=</span> acos(<span style="color:#f92672">-</span><span style="color:#ae81ff">1.0</span>);  <span style="color:#75715e">// true value of pi
+</span><span style="color:#75715e"></span>    <span style="color:#66d9ef">double</span> error <span style="color:#f92672">=</span> abs(pi <span style="color:#f92672">-</span> pi_true) <span style="color:#f92672">/</span> pi_true <span style="color:#f92672">*</span> <span style="color:#ae81ff">100</span>;
+    
+    <span style="color:#66d9ef">auto</span> duration <span style="color:#f92672">=</span> duration_cast<span style="color:#f92672">&lt;</span>microseconds<span style="color:#f92672">&gt;</span>(system_clock<span style="color:#f92672">::</span>now() <span style="color:#f92672">-</span> start);
+
+    fprintf(stdout, <span style="color:#e6db74">&#34;threads = %d</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#34;</span>, num_threads);
+    fprintf(stdout, <span style="color:#e6db74">&#34;samples = %lld</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#34;</span>, (<span style="color:#66d9ef">long</span> <span style="color:#66d9ef">long</span>)num_samples);
+    fprintf(stdout, <span style="color:#e6db74">&#34;duration = %.2fms</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#34;</span>, duration.count()<span style="color:#f92672">/</span><span style="color:#ae81ff">1000.0</span>);
+    fprintf(stdout, <span style="color:#e6db74">&#34;pi = %f (%f%% error)</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#34;</span>, pi, error);
+    fprintf(stdout, <span style="color:#e6db74">&#34;</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#34;</span>);
+
+    <span style="color:#66d9ef">delete</span> []rnd;
+    <span style="color:#66d9ef">delete</span> []in_points;
+
+    <span style="color:#66d9ef">return</span> <span style="color:#ae81ff">0</span>;
+}
+</code></pre></div><p>在我的MacBook Pro(16-inch, 2019)上测试，结果为：
+<img src="/images/cpu-cache-false-sharing-1.png" alt=""></p>
+<p>上工具看看这个结果怎么样。祭出Instruments，发现了一个奇怪的问题：
+<img src="/images/cpu-cache-false-sharing-2.png" alt=""></p>
+<p><code>(*in)++</code>这一句对应到Load-Increment-Store三个动作，理论上应该很简单，占用这么多CPU时间不正常。</p>
+<h2 id="修复">修复</h2>
+<p>内存修改性操作 + 多线程，盲猜这是一个 &ldquo;Cache False Sharing&rdquo; 问题。对于x86 CPU，Cache Line大小一般为64字节。尝试修复一下：
+<img src="/images/cpu-cache-false-sharing-3.png" alt="">
+<img src="/images/cpu-cache-false-sharing-4.png" alt=""></p>
+<p>哇，快了1倍左右，效果很明显。现在对counter的自增操作的CPU开销明显低于调用随机数生成器的开销，比较合理。可以确认之前的问题的确是因为存在False Sharing。</p>
+<p>虽然问题修复了，不过还是系统回顾一下相关的知识点。</p>
+<h2 id="为什么要有cache">为什么要有Cache?</h2>
+<p>因为现代计算机存在着显著的 Processor-Memory Speed Gap ：
+<img src="/images/cpu-cache-false-sharing-5.png" alt="">
+虽然这张图只画到2000年，但这个趋势到目前为止大体上是维持的。</p>
+<p>为什么会这样？根据这篇论文<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup>的研究，大致可以归纳为：</p>
+<blockquote>
+<p>the prime reason is the division of the semiconductor industry into microprocessor and memory fields. As a conse- quence their technology headed in different directions: the first one has increased in speed, while the latter has increased in capacity.</p>
+</blockquote>
+<p>到了1990年代中期，上述问题已经比较明显的影响到了程序运行速度的提升。CPU厂商逐步引入一种被称为Cache Memory的部件，放置于CPU和Memory的访问路径之间，来降低Memory的<strong>访问延迟</strong>。Cache Memory通常使用<a href="https://en.wikipedia.org/wiki/Static_random-access_memory">SRAM</a>来实现，相比于Main Memory的<a href="https://en.wikipedia.org/wiki/Dynamic_random-access_memory">DRAM</a>，其<strong>速度快得多但成本也高得多</strong>。</p>
+<p>随着架构的演进，当今CPU中通常存在着多级Cache，例如L3-L2-L1，而L1通常还可细分为I-Cache和D-Cache，分别对应着指令流和数据流的加速。</p>
+<h2 id="为什么cache可以降低访问延迟">为什么Cache可以降低访问延迟？</h2>
+<p>计算机程序的访存操作，通常具有<strong>时间局部性</strong>的特点：</p>
+<blockquote>
+<p>Temporal locality: Recently referenced items are likely to be referenced in the near future.</p>
+</blockquote>
+<p>通过将最近访问到的元素存入Cache，后继操作直接从Cache中处理，由于Cache的访问速度比主内存的访问速度要快得多，因而可以降低整体的访问延迟。程序的时间局部性越好，收益越高。</p>
+<p>访存操作通常还具有<strong>空间局部性</strong>的特点：</p>
+<blockquote>
+<p>Spatial locality: Items with nearby addresses tend to be referenced close together in time.</p>
+</blockquote>
+<p>通过将Cache组织为若干个<strong>Cache Line</strong>，在访问到某个元素时，将其相邻的一整个Cache Line的元素都整体存入Cache，使得后继对相邻元素的访问可以直接从Cache中处理，进而可以降低整体的访问延迟。程序的空间局部性越好，收益越高。Cache Line的尺寸和CPU架构相关，在x86平台上通常为64字节。</p>
+<h2 id="memory-hierarchy">Memory Hierarchy</h2>
+<p>看一下2012年左右的Intel Sandy Bridge E class servers的存储器分层结构<sup id="fnref:2"><a href="#fn:2" class="footnote-ref" role="doc-noteref">2</a></sup>：
+<img src="/images/cpu-cache-false-sharing-6.png" alt=""></p>
+<p>可以看到，最上层为寄存器，速度最快；往下依次为L1, L2, L3, DRAM，其速度逐渐变慢而容量逐渐增大。L1和DRAM的访问速度有几十倍以上的差距。</p>
+<p>不过这里有一个问题：L1~L3应该都是基于SRAM来实现，为啥速度不同呢？找到一个回答<sup id="fnref:3"><a href="#fn:3" class="footnote-ref" role="doc-noteref">3</a></sup>说的比较清楚：</p>
+<blockquote>
+<p>Although they use SRAM, they do not all use the same SRAM design. SRAM for L2 and L3 are optimized for size (to increase the capacity given limited manufacturable chip size or reduce the cost of a given capacity) while SRAM for L1 is more likely to be optimized for speed.</p>
+</blockquote>
+<h2 id="cache-coherence">Cache Coherence</h2>
+<p>上图显示的是通过QPI总线相连的两个CPU Socket，各自有其对应的DRAM。不过我们目前先聚焦到单个CPU上。</p>
+<p>对于多核CPU，一般是最后一级Cache由整个CPU共享（例如上图中的L3），其之上的Cache（例如上图中的L1, L2）则是每个Core均有一份。这就带来了一个问题：若多个Core都访问（读/写）了同一个内存地址，这个地址的内容会被存入多个Core各自的Cache中；此时若某个Core对此内存地址执行写入操作，如何确保其它Core能<strong>感知</strong>到此修改，进而能读到此内存地址的<strong>最新值</strong>？</p>
+<p>为了处理上述问题，CPU厂商引入了Cache Coherence Protocol，其中最基础的是Intel的MESI协议<sup id="fnref:4"><a href="#fn:4" class="footnote-ref" role="doc-noteref">4</a></sup>，实际你电脑中CPU上跑的协议可能不同但基础原理与之类似。</p>
+<h2 id="mesi-protocol">MESI protocol</h2>
+<p>前面已经讲过Cache存取的最小单位是Cache Line。</p>
+<p>MESI协议为每个Cache Line定义了四种状态：</p>
+<ul>
+<li><strong>Modified (M)</strong>
+<ul>
+<li>The cache line is present only in the current cache, and is dirty - it has been modified from the value in main memory. The cache is required to write the data back to main memory at some time in the future, before permitting any other read of the (no longer valid) main memory state. The write-back changes the line to the Shared state(S).</li>
+</ul>
+</li>
+<li><strong>Exclusive (E)</strong>
+<ul>
+<li>The cache line is present only in the current cache, but is clean - it matches main memory. It may be changed to the Shared state at any time, in response to a read request. Alternatively, it may be changed to the Modified state when writing to it.</li>
+</ul>
+</li>
+<li><strong>Shared (S)</strong>
+<ul>
+<li>Indicates that this cache line may be stored in other caches of the machine and is clean - it matches the main memory. The line may be discarded (changed to the Invalid state) at any time.</li>
+</ul>
+</li>
+<li><strong>Invalid (I)</strong>
+<ul>
+<li>Indicates that this cache line is invalid (unused).</li>
+</ul>
+</li>
+</ul>
+<p>上述四种状态组成一个有限状态机（FSM），某个Core的Cache通过与Bus及其它Core的Cache的协作，在上述状态中进行迁移。相关的内容较多，这里仅举一个例子：
+<img src="/images/cpu-cache-false-sharing-7.png" alt="">
+当初始状态为S：</p>
+<ul>
+<li>当前处理器执行读操作：不产生总线操作；状态继续为S不变；得到一个Cache Hit；</li>
+<li>当前处理器执行写操作：在总线上产生一个BusUpgr信号；状态迁移至M；其它Core的Cache收到BusUpgr信号时将其对应Cache Line的状态修改为(I)Invalid；</li>
+</ul>
+<h2 id="什么是cache-false-sharing">什么是Cache False Sharing?</h2>
+<p>当多个Core同时读写同一个内存地址时，由于上述的Cache Coherence机制，会产生额外的性能开销。这种情况是真正的“共享”，需要通过修改程序逻辑的方法来优化。</p>
+<p>当多个Core同时读写<strong>多个不同的地址</strong>，但这些地址<strong>由于相邻会被映射到同一个Cache Line</strong>时，虽然从程序逻辑上不存在内存地址“共享”，但因为Cache实现机制的问题存在一个隐式的“共享”，我们称之为False Sharing。下图<sup id="fnref:5"><a href="#fn:5" class="footnote-ref" role="doc-noteref">5</a></sup>是一个例子：
+<img src="/images/cpu-cache-false-sharing-8.gif" alt=""></p>
+<p>Cache False Sharing在实践中出现的较为隐蔽，一般需要通过类似VTune<sup id="fnref:6"><a href="#fn:6" class="footnote-ref" role="doc-noteref">6</a></sup>/Instruments/perf这样的profiling工具，结合经验来分析定位。</p>
+<h2 id="多想一秒">多想一秒</h2>
+<p>前面我们通过将counter padding到Cache Line Size，将示例程序的性能提高了一倍，看起来挺不错。不过转念一想，每个线程的counter的中间值并不需要对外暴露，那我们可以将线程的counter存在局部变量（简单类型可以优化为寄存器读写）中，线程执行完时再写回到Memory：
+<img src="/images/cpu-cache-false-sharing-9.png" alt=""></p>
+<p>看看效果吧（果然还是寄存器最快！）：
+<img src="/images/cpu-cache-false-sharing-10.png" alt=""></p>
+<h2 id="references">References</h2>
+<section class="footnotes" role="doc-endnotes">
+<hr>
+<ol>
+<li id="fn:1" role="doc-endnote">
+<p><a href="http://gec.di.uminho.pt/discip/minf/ac0102/1000gap_proc-mem_speed.pdf">http://gec.di.uminho.pt/discip/minf/ac0102/1000gap_proc-mem_speed.pdf</a> <a href="#fnref:1" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+</li>
+<li id="fn:2" role="doc-endnote">
+<p><a href="https://mechanical-sympathy.blogspot.com/2013/02/cpu-cache-flushing-fallacy.html">https://mechanical-sympathy.blogspot.com/2013/02/cpu-cache-flushing-fallacy.html</a> <a href="#fnref:2" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+</li>
+<li id="fn:3" role="doc-endnote">
+<p><a href="https://superuser.com/questions/724504/processors-cache-l1-l2-and-l3-are-all-made-of-sram">https://superuser.com/questions/724504/processors-cache-l1-l2-and-l3-are-all-made-of-sram</a> <a href="#fnref:3" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+</li>
+<li id="fn:4" role="doc-endnote">
+<p><a href="https://en.wikipedia.org/wiki/MESI_protocol">https://en.wikipedia.org/wiki/MESI_protocol</a> <a href="#fnref:4" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+</li>
+<li id="fn:5" role="doc-endnote">
+<p><a href="https://software.intel.com/content/www/us/en/develop/articles/avoiding-and-identifying-false-sharing-among-threads.html">https://software.intel.com/content/www/us/en/develop/articles/avoiding-and-identifying-false-sharing-among-threads.html</a> <a href="#fnref:5" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+</li>
+<li id="fn:6" role="doc-endnote">
+<p><a href="https://software.intel.com/content/www/us/en/develop/documentation/vtune-cookbook/top/tuning-recipes/false-sharing.html">https://software.intel.com/content/www/us/en/develop/documentation/vtune-cookbook/top/tuning-recipes/false-sharing.html</a> <a href="#fnref:6" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+</li>
+</ol>
+</section>
+
+		</section>
+
+		<div class="post-tags">
+			
+			
+			
+		</div>
+	</article>
+</main>
+<footer>
+<hr><a class="soc" href="https://github.com/zhuyie" title="GitHub"><i data-feather="github"></i></a>|⚡️
+	2021  © zhuyie |  <a href="https://github.com/athul/archie">Archie Theme</a> | Built with <a href="https://gohugo.io">Hugo</a>
+</footer>
+
+
+<script type="application/javascript">
+var doNotTrack = false;
+if (!doNotTrack) {
+	window.ga=window.ga||function(){(ga.q=ga.q||[]).push(arguments)};ga.l=+new Date;
+	ga('create', 'UA-195056302-1', 'auto');
+	
+	ga('send', 'pageview');
+}
+</script>
+<script async src='https://www.google-analytics.com/analytics.js'></script>
+
+<script>
+      feather.replace()
+</script></div>
+    </body>
+</html>

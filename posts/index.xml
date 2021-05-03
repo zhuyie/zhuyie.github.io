@@ -7,7 +7,17 @@
     <generator>Hugo -- gohugo.io</generator>
     <language>en-us</language>
     <copyright>© zhuyie</copyright>
-    <lastBuildDate>Mon, 19 Apr 2021 21:20:23 +0800</lastBuildDate><atom:link href="https://zhuyie.github.io/posts/index.xml" rel="self" type="application/rss+xml" />
+    <lastBuildDate>Mon, 03 May 2021 13:06:16 +0800</lastBuildDate><atom:link href="https://zhuyie.github.io/posts/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>CPU Cache False Sharing</title>
+      <link>https://zhuyie.github.io/posts/cpu-cache-false-sharing/</link>
+      <pubDate>Mon, 03 May 2021 13:06:16 +0800</pubDate>
+      
+      <guid>https://zhuyie.github.io/posts/cpu-cache-false-sharing/</guid>
+      <description>起因 一个通过蒙特卡洛方法估算 π 值的测试程序，采用了多线程的方式，其代码大致如下：
+#include &amp;#34;...&amp;#34; class RandomNumber { mt19937 mt19937_; // random number generator  const float MT19937_FLOAT_MULTI = 2.3283064365386962890625e-10f; // (2^32-1)^-1 public: void seed(unsigned int seed) { mt19937_.seed(seed); } float operator() () { return mt19937_() * MT19937_FLOAT_MULTI; } }; void worker(int worker_id, int64_t samples, RandomNumber *rnd, int64_t *in) { rnd-&amp;gt;seed(worker_id); // seed the prng  for (int64_t i = 0; i &amp;lt; samples; i++) { float x = (*rnd)(); float y = (*rnd)(); if (x*x + y*y &amp;lt;= 1) { (*in)++; } } } int main(int argc, char* argv[]) { int num_threads = 16; int64_t num_samples = 1000000000; // parsing command line arguments  auto start = system_clock::now(); RandomNumber* rnd = new RandomNumber[num_threads]; int64_t* in_points = new int64_t[num_threads]; int64_t total_points = num_samples; int64_t circle_points = 0; vector&amp;lt;thread&amp;gt; threads; for (int i = 0; i &amp;lt; num_threads; i++) { int64_t samples = num_samples / num_threads; if (i == num_threads - 1) { samples += num_samples - samples * num_threads; } threads.</description>
+    </item>
+    
     <item>
       <title>在MacOS命令行程序中使用Metal</title>
       <link>https://zhuyie.github.io/posts/use-metal-in-command-line-app/</link>
