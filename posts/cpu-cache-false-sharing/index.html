@@ -141,7 +141,7 @@
 虽然这张图只画到2000年，但这个趋势到目前为止大体上是维持的。</p>
 <p>为什么会这样？根据这篇论文<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup>的研究，大致可以归纳为：</p>
 <blockquote>
-<p>the prime reason is the division of the semiconductor industry into microprocessor and memory fields. As a conse- quence their technology headed in different directions: the first one has increased in speed, while the latter has increased in capacity.</p>
+<p>the prime reason is the division of the semiconductor industry into microprocessor and memory fields. As a consequence their technology headed in different directions: the first one has increased in speed, while the latter has increased in capacity.</p>
 </blockquote>
 <p>到了1990年代中期，上述问题已经比较明显的影响到了程序运行速度的提升。CPU厂商逐步引入一种被称为Cache Memory的部件，放置于CPU和Memory的访问路径之间，来降低Memory的<strong>访问延迟</strong>。Cache Memory通常使用<a href="https://en.wikipedia.org/wiki/Static_random-access_memory">SRAM</a>来实现，相比于Main Memory的<a href="https://en.wikipedia.org/wiki/Dynamic_random-access_memory">DRAM</a>，其<strong>速度快得多但成本也高得多</strong>。</p>
 <p>随着架构的演进，当今CPU中通常存在着多级Cache，例如L3-L2-L1，而L1通常还可细分为I-Cache和D-Cache，分别对应着指令流和数据流的加速。</p>
@@ -204,7 +204,8 @@
 <p>当多个Core同时读写同一个内存地址时，由于上述的Cache Coherence机制，会产生额外的性能开销。这种情况是真正的“共享”，需要通过修改程序逻辑的方法来优化。</p>
 <p>当多个Core同时读写<strong>多个不同的地址</strong>，但这些地址<strong>由于相邻会被映射到同一个Cache Line</strong>时，虽然从程序逻辑上不存在内存地址“共享”，但因为Cache实现机制的问题存在一个隐式的“共享”，我们称之为False Sharing。下图<sup id="fnref:5"><a href="#fn:5" class="footnote-ref" role="doc-noteref">5</a></sup>是一个例子：
 <img src="/images/cpu-cache-false-sharing-8.gif" alt=""></p>
-<p>Cache False Sharing在实践中出现的较为隐蔽，一般需要通过类似VTune<sup id="fnref:6"><a href="#fn:6" class="footnote-ref" role="doc-noteref">6</a></sup>/Instruments/perf这样的profiling工具，结合经验来分析定位。</p>
+<p>回忆一下之前的示例程序，刚好就是这种情况：多个线程（从多个Core上）持续对位于同一Cache Line的不同变量进行自增操作，其Cache Line会持续的经历S-&gt;M的状态迁移，伴随着对其它Core的Invalid操作。这种密集的相互“踩踏”的行为，极大的降低了Cache的命中率，进而大幅度影响到程序的运行效率。</p>
+<p>Cache False Sharing在实际工程实践中出现的较为隐蔽，一般需要通过类似VTune<sup id="fnref:6"><a href="#fn:6" class="footnote-ref" role="doc-noteref">6</a></sup>/Instruments/perf这样的profiling工具，结合经验来分析定位。</p>
 <h2 id="多想一秒">多想一秒</h2>
 <p>前面我们通过将counter padding到Cache Line Size，将示例程序的性能提高了一倍，看起来挺不错。不过转念一想，每个线程的counter的中间值并不需要对外暴露，那我们可以将线程的counter存在局部变量（简单类型可以优化为寄存器读写）中，线程执行完时再写回到Memory：
 <img src="/images/cpu-cache-false-sharing-9.png" alt=""></p>
