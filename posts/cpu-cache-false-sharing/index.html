@@ -166,9 +166,9 @@
 </blockquote>
 <h2 id="cache-coherence">Cache Coherence</h2>
 <p>上图显示的是通过QPI总线相连的两个CPU Socket，各自有其对应的DRAM。不过我们目前先聚焦到单个CPU上。</p>
-<p>对于多核CPU，一般是最后一级Cache由整个CPU共享（例如上图中的L3），其之上的Cache（例如上图中的L1, L2）则是每个Core均有一份。这就带来了一个问题：若多个Core都访问（读/写）了同一个内存地址，这个地址的内容会被存入多个Core各自的Cache中；此时若某个Core对此内存地址执行写入操作，如何确保其它Core能<strong>感知</strong>到此修改，进而能读到此内存地址的<strong>最新值</strong>？</p>
-<p>为了处理上述问题，CPU厂商引入了Cache Coherence Protocol，其中最基础的是Intel的MESI协议<sup id="fnref:4"><a href="#fn:4" class="footnote-ref" role="doc-noteref">4</a></sup>，实际你电脑中CPU上跑的协议可能不同但基础原理与之类似。</p>
-<h2 id="mesi-protocol">MESI protocol</h2>
+<p>对于多核CPU，一般是最后一级Cache由整个CPU共享（例如上图中的L3），其之上的Cache（例如上图中的L1, L2）则是每个Core均有一份。这就带来了一个问题：若多个Core都访问（读/写）了同一个内存地址，这个地址的内容会被存入多个Core各自的Cache中；<strong>此时若某个Core对此内存地址执行写入操作，如何确保其它Core能感知到此修改，进而能读到此内存地址的最新值？</strong></p>
+<p>为了处理上述问题，CPU厂商引入了Cache Coherence Protocol，其中一种最常见的是MESI协议<sup id="fnref:4"><a href="#fn:4" class="footnote-ref" role="doc-noteref">4</a></sup> (also known as the Illinois protocol)，实际你电脑中CPU上跑的协议可能不同但基础原理与之类似。</p>
+<h2 id="mesi-protocol">MESI Protocol</h2>
 <p>前面已经讲过Cache存取的最小单位是Cache Line。</p>
 <p>MESI协议为每个Cache Line定义了四种状态：</p>
 <ul>
