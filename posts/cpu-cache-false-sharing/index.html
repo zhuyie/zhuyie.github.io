@@ -156,18 +156,43 @@
 <p>Spatial locality: Items with nearby addresses tend to be referenced close together in time.</p>
 </blockquote>
 <p>通过将Cache组织为若干个<strong>Cache Line</strong>，在访问到某个元素时，将其相邻的一整个Cache Line的元素都整体存入Cache，使得后继对相邻元素的访问可以直接从Cache中处理，进而可以降低整体的访问延迟。程序的空间局部性越好，收益越高。Cache Line的尺寸和CPU架构相关，在x86平台上通常为64字节。</p>
+<h2 id="writing-policies">Writing policies</h2>
+<p>Cache位于CPU和Memory的访问路径之间。对于<strong>读操作</strong>，其工作逻辑应该很容易理解：CPU读某个内存地址时，若其在Cache中找到，则直接从Cache中返回数据（对应一个Cache Hit）；若没有找到，则从Memory中读取对应数据（以Cache Line大小为单位，对齐到Cache Line边界），写入Cache（若Cache中对应存储区域已满，则基于某种策略淘汰一个Cache Line来腾出空间），再返回给CPU（对应一个Cache Miss）。</p>
+<p><strong>写操作</strong>则要复杂一些。我们先看下<strong>常规Cache系统</strong>中的一些设计策略<sup id="fnref:2"><a href="#fn:2" class="footnote-ref" role="doc-noteref">2</a></sup>。</p>
+<ol>
+<li>若待写入的数据在Cache中不存在，是否需要在写入Backing store的同时，将对应内容也存入Cache呢？
+<ul>
+<li>Write allocate: data at the missed-write location is loaded to cache, followed by a write-hit operation. In this approach, write misses are similar to read misses.</li>
+<li>No-write allocate: data at the missed-write location is not loaded to cache, and is written directly to the backing store. In this approach, data is loaded into the cache on read misses only.</li>
+</ul>
+</li>
+<li>每次写入是否都要写入到Backing store，换句话说，是否允许做延迟写(Lazy write)?
+<ul>
+<li>Write-through: write is done synchronously both to the cache and to the backing store.</li>
+<li>Write-back: initially, writing is done only to the cache. The write to the backing store is postponed until the modified content is about to be replaced by another cache block.</li>
+</ul>
+</li>
+</ol>
+<p>常见的策略组合为：</p>
+<ol>
+<li>A write-through cache with no-write allocation:
+<img src="/images/cpu-cache-false-sharing-11.svg" alt=""></li>
+<li>A write-back cache with write allocation:
+<img src="/images/cpu-cache-false-sharing-12.svg" alt=""></li>
+</ol>
+<p>回想一下，CPU Cache的主要目标是降低Memory的读写延迟，而Write-back with write-allocation在这个目标上明显更有效。因此，多数CPU Cache都采用了这种策略。</p>
 <h2 id="memory-hierarchy">Memory Hierarchy</h2>
-<p>看一下2012年左右的Intel Sandy Bridge E class servers的存储器分层结构<sup id="fnref:2"><a href="#fn:2" class="footnote-ref" role="doc-noteref">2</a></sup>：
+<p>看一下2012年左右的Intel Sandy Bridge E class servers的存储器分层结构<sup id="fnref:3"><a href="#fn:3" class="footnote-ref" role="doc-noteref">3</a></sup>：
 <img src="/images/cpu-cache-false-sharing-6.png" alt=""></p>
 <p>可以看到，最上层为寄存器，速度最快；往下依次为L1, L2, L3, DRAM，其速度逐渐变慢而容量逐渐增大。L1和DRAM的访问速度有几十倍以上的差距。</p>
-<p>不过这里有一个问题：L1~L3应该都是基于SRAM来实现，为啥速度不同呢？找到一个回答<sup id="fnref:3"><a href="#fn:3" class="footnote-ref" role="doc-noteref">3</a></sup>说的比较清楚：</p>
+<p>不过这里有一个问题：L1~L3应该都是基于SRAM来实现，为啥速度不同呢？找到一个回答<sup id="fnref:4"><a href="#fn:4" class="footnote-ref" role="doc-noteref">4</a></sup>说的比较清楚：</p>
 <blockquote>
 <p>Although they use SRAM, they do not all use the same SRAM design. SRAM for L2 and L3 are optimized for size (to increase the capacity given limited manufacturable chip size or reduce the cost of a given capacity) while SRAM for L1 is more likely to be optimized for speed.</p>
 </blockquote>
 <h2 id="cache-coherence">Cache Coherence</h2>
 <p>上图显示的是通过QPI总线相连的两个CPU Socket，各自有其对应的DRAM。不过我们目前先聚焦到单个CPU上。</p>
 <p>对于多核CPU，一般是最后一级Cache由整个CPU共享（例如上图中的L3），其之上的Cache（例如上图中的L1, L2）则是每个Core均有一份。这就带来了一个问题：若多个Core都访问（读/写）了同一个内存地址，这个地址的内容会被存入多个Core各自的Cache中；<strong>此时若某个Core对此内存地址执行写入操作，如何确保其它Core能感知到此修改，进而能读到此内存地址的最新值？</strong></p>
-<p>为了处理上述问题，CPU厂商引入了Cache Coherence Protocol，其中一种最常见的是MESI协议<sup id="fnref:4"><a href="#fn:4" class="footnote-ref" role="doc-noteref">4</a></sup> (also known as the Illinois protocol)，实际你电脑中CPU上跑的协议可能不同但基础原理与之类似。</p>
+<p>为了处理上述问题，CPU厂商引入了Cache Coherence Protocol，其中一种最常见的是MESI协议<sup id="fnref:5"><a href="#fn:5" class="footnote-ref" role="doc-noteref">5</a></sup> (also known as the Illinois protocol)，实际你电脑中CPU上跑的协议可能不同但基础原理与之类似。</p>
 <h2 id="mesi-protocol">MESI Protocol</h2>
 <p>前面已经讲过Cache存取的最小单位是Cache Line。</p>
 <p>MESI协议为每个Cache Line定义了四种状态：</p>
@@ -202,10 +227,10 @@
 </ul>
 <h2 id="什么是cache-false-sharing">什么是Cache False Sharing?</h2>
 <p>当多个Core同时读写同一个内存地址时，由于上述的Cache Coherence机制，会产生额外的性能开销。这种情况是真正的“共享”，需要通过修改程序逻辑的方法来优化。</p>
-<p>当多个Core同时读写<strong>多个不同的地址</strong>，但这些地址<strong>由于相邻会被映射到同一个Cache Line</strong>时，虽然从程序逻辑上不存在内存地址“共享”，但因为Cache实现机制的问题存在一个隐式的“共享”，我们称之为False Sharing。下图<sup id="fnref:5"><a href="#fn:5" class="footnote-ref" role="doc-noteref">5</a></sup>是一个例子：
+<p>当多个Core同时读写<strong>多个不同的地址</strong>，但这些地址<strong>由于相邻会被映射到同一个Cache Line</strong>时，虽然从程序逻辑上不存在内存地址“共享”，但因为Cache实现机制的问题存在一个隐式的“共享”，我们称之为False Sharing。下图<sup id="fnref:6"><a href="#fn:6" class="footnote-ref" role="doc-noteref">6</a></sup>是一个例子：
 <img src="/images/cpu-cache-false-sharing-8.gif" alt=""></p>
 <p>回忆一下之前的示例程序，刚好就是这种情况：多个线程（从多个Core上）持续对位于同一Cache Line的不同变量进行自增操作，其Cache Line会持续的经历S-&gt;M的状态迁移，伴随着对其它Core的Invalid操作。这种密集的相互“踩踏”的行为，极大的降低了Cache的命中率，进而大幅度影响到程序的运行效率。</p>
-<p>Cache False Sharing在实际工程实践中出现的较为隐蔽，一般需要通过类似VTune<sup id="fnref:6"><a href="#fn:6" class="footnote-ref" role="doc-noteref">6</a></sup>/Instruments/perf这样的profiling工具，结合经验来分析定位。</p>
+<p>Cache False Sharing在实际工程实践中出现的较为隐蔽，一般需要通过类似VTune<sup id="fnref:7"><a href="#fn:7" class="footnote-ref" role="doc-noteref">7</a></sup>/Instruments/perf这样的profiling工具，结合经验来分析定位。</p>
 <h2 id="多想一秒">多想一秒</h2>
 <p>前面我们通过将counter padding到Cache Line Size，将示例程序的性能提高了一倍，看起来挺不错。不过转念一想，每个线程的counter的中间值并不需要对外暴露，那我们可以将线程的counter存在局部变量（简单类型可以优化为寄存器读写）中，线程执行完时再写回到Memory：
 <img src="/images/cpu-cache-false-sharing-9.png" alt=""></p>
@@ -219,19 +244,22 @@
 <p><a href="http://gec.di.uminho.pt/discip/minf/ac0102/1000gap_proc-mem_speed.pdf">http://gec.di.uminho.pt/discip/minf/ac0102/1000gap_proc-mem_speed.pdf</a> <a href="#fnref:1" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
 <li id="fn:2" role="doc-endnote">
-<p><a href="https://mechanical-sympathy.blogspot.com/2013/02/cpu-cache-flushing-fallacy.html">https://mechanical-sympathy.blogspot.com/2013/02/cpu-cache-flushing-fallacy.html</a> <a href="#fnref:2" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+<p><a href="https://en.wikipedia.org/wiki/Cache_(computing)#Operation">https://en.wikipedia.org/wiki/Cache_(computing)#Operation</a> <a href="#fnref:2" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
 <li id="fn:3" role="doc-endnote">
-<p><a href="https://superuser.com/questions/724504/processors-cache-l1-l2-and-l3-are-all-made-of-sram">https://superuser.com/questions/724504/processors-cache-l1-l2-and-l3-are-all-made-of-sram</a> <a href="#fnref:3" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+<p><a href="https://mechanical-sympathy.blogspot.com/2013/02/cpu-cache-flushing-fallacy.html">https://mechanical-sympathy.blogspot.com/2013/02/cpu-cache-flushing-fallacy.html</a> <a href="#fnref:3" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
 <li id="fn:4" role="doc-endnote">
-<p><a href="https://en.wikipedia.org/wiki/MESI_protocol">https://en.wikipedia.org/wiki/MESI_protocol</a> <a href="#fnref:4" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+<p><a href="https://superuser.com/questions/724504/processors-cache-l1-l2-and-l3-are-all-made-of-sram">https://superuser.com/questions/724504/processors-cache-l1-l2-and-l3-are-all-made-of-sram</a> <a href="#fnref:4" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
 <li id="fn:5" role="doc-endnote">
-<p><a href="https://software.intel.com/content/www/us/en/develop/articles/avoiding-and-identifying-false-sharing-among-threads.html">https://software.intel.com/content/www/us/en/develop/articles/avoiding-and-identifying-false-sharing-among-threads.html</a> <a href="#fnref:5" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+<p><a href="https://en.wikipedia.org/wiki/MESI_protocol">https://en.wikipedia.org/wiki/MESI_protocol</a> <a href="#fnref:5" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
 <li id="fn:6" role="doc-endnote">
-<p><a href="https://software.intel.com/content/www/us/en/develop/documentation/vtune-cookbook/top/tuning-recipes/false-sharing.html">https://software.intel.com/content/www/us/en/develop/documentation/vtune-cookbook/top/tuning-recipes/false-sharing.html</a> <a href="#fnref:6" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+<p><a href="https://software.intel.com/content/www/us/en/develop/articles/avoiding-and-identifying-false-sharing-among-threads.html">https://software.intel.com/content/www/us/en/develop/articles/avoiding-and-identifying-false-sharing-among-threads.html</a> <a href="#fnref:6" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+</li>
+<li id="fn:7" role="doc-endnote">
+<p><a href="https://software.intel.com/content/www/us/en/develop/documentation/vtune-cookbook/top/tuning-recipes/false-sharing.html">https://software.intel.com/content/www/us/en/develop/documentation/vtune-cookbook/top/tuning-recipes/false-sharing.html</a> <a href="#fnref:7" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
 </ol>
 </section>
