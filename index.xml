@@ -14,7 +14,7 @@
       <pubDate>Tue, 18 May 2021 11:26:35 +0800</pubDate>
       
       <guid>https://zhuyie.github.io/posts/cpu-branch-prediction-demo/</guid>
-      <description>起因 最近在看一些CPU Microarchitecture相关的资料，其中的分支预测器1，对多数程序员而言都还停留在 “听过” 的阶段。为了实测一下分支预测对程序性能的影响，设计了一个小测试程序2。
+      <description>起因 最近在看一些CPU Microarchitecture相关的资料，其中的分支预测器1，对多数程序员都还停留在 “听过” 的阶段。为了实测一下分支预测对程序性能的影响，设计了一个小测试程序2。
 Test program #include &amp;lt;cstdio&amp;gt;#include &amp;lt;cstdlib&amp;gt;#include &amp;lt;vector&amp;gt;#include &amp;lt;random&amp;gt;#include &amp;lt;algorithm&amp;gt;#include &amp;lt;chrono&amp;gt;using namespace std::chrono; static int dummy[2]; int main(int argc, char* argv[]) { // parsing command line  bool sort = false; if (argc &amp;gt; 1 &amp;amp;&amp;amp; strcmp(argv[1], &amp;#34;1&amp;#34;) == 0) { sort = true; } // prepare test data (uniformly distributed random values)  const int arraySize = 5000; std::vector&amp;lt;int&amp;gt; data; data.resize(arraySize); std::random_device rd; std::mt19937 gen(rd()); std::uniform_int_distribution&amp;lt;&amp;gt; dis(0, 256); for (int i = 0; i &amp;lt; arraySize; i++) { data[i] = dis(gen); } // sort or not  if (sort) { std::sort(data.</description>
     </item>
     

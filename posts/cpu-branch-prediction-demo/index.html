@@ -46,7 +46,7 @@
 
 		<section class="body">
 			<h2 id="起因">起因</h2>
-<p>最近在看一些CPU Microarchitecture相关的资料，其中的分支预测器<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup>，对多数程序员而言都还停留在 “听过” 的阶段。为了实测一下分支预测对程序性能的影响，设计了一个小测试程序<sup id="fnref:2"><a href="#fn:2" class="footnote-ref" role="doc-noteref">2</a></sup>。</p>
+<p>最近在看一些CPU Microarchitecture相关的资料，其中的分支预测器<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup>，对多数程序员都还停留在 “听过” 的阶段。为了实测一下分支预测对程序性能的影响，设计了一个小测试程序<sup id="fnref:2"><a href="#fn:2" class="footnote-ref" role="doc-noteref">2</a></sup>。</p>
 <h2 id="test-program">Test program</h2>
 <div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++"><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;cstdio&gt;</span><span style="color:#75715e">
 </span><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;cstdlib&gt;</span><span style="color:#75715e">
@@ -108,7 +108,7 @@
     <span style="color:#66d9ef">return</span> <span style="color:#ae81ff">0</span>;
 }
 </code></pre></div><h2 id="说明">说明</h2>
-<p>整个测试程序的结构大致分为如下几步：</p>
+<p>整个测试程序的流程大致分为如下几步：</p>
 <ol>
 <li>准备一个指定长度（这里用的5000）的<code>vector&lt;int&gt;</code>，将其填充为一系列指定范围（这里用的0-256）内<strong>均匀分布的随机数</strong>。</li>
 <li>根据命令行参数，决定是否对此vector中的数据进行<strong>排序</strong>。</li>
@@ -120,9 +120,9 @@
 </li>
 <li>打印结果。</li>
 </ol>
-<p>其中的关键是3.1中的if语句，CPU将会在这里执行分支预测，当预测失败时，相关的指令会被废除掉（其执行效果不会暴露到Architectural state的层面），并跳转到正确的分支来重新执行。这也就是所谓的<strong>misprediction penalty</strong>。</p>
-<p>大多数CPU厂商没有公开其具体使用了哪种分支预测器的实现<sup id="fnref:3"><a href="#fn:3" class="footnote-ref" role="doc-noteref">3</a></sup>。但从逻辑上说，分支预测器是一个相对简单的硬件电路，它只能基于其设计逻辑或者有限的历史数据来识别某个分支语句的模式，进而作出预测。<strong>当某个分支语句被Taken的模式越简单，分支预测器的准确率越高，反之亦然</strong>。</p>
-<p>就我们的测试程序而言，当vector中的数据是均匀分布的随机数时，if语句在下一次执行时哪一个分支会被taken，具有非常大的不确定性，换句话说就是模式很混乱。而当vector中数据进行排序之后，此if语句大致上会在前2500次执行时选择if分支，后2500次执行时选择else分支，预测正确的难度低非常多。</p>
+<p>其中的关键是3.1中的if语句，CPU将会在这里执行分支预测和推测执行<sup id="fnref:3"><a href="#fn:3" class="footnote-ref" role="doc-noteref">3</a></sup>。当预测失败时，相关的指令会被废除掉（其执行效果不会暴露到Architectural state的层面），并跳转到正确的分支来重新执行。这也就是所谓的<strong>misprediction penalty</strong>。</p>
+<p>大多数CPU厂商没有公开其分支预测器的实现方式<sup id="fnref:4"><a href="#fn:4" class="footnote-ref" role="doc-noteref">4</a></sup>。但从逻辑上说，分支预测器是一个相对简单的硬件电路，它只能基于其设计逻辑或者有限的历史数据来识别某个分支语句的<strong>模式</strong>，进而作出预测。<strong>当某个分支语句被taken的模式越简单，分支预测器的准确率就越高，反之亦然</strong>。</p>
+<p>就我们的测试程序而言，当vector中的数据是（整体上）均匀分布的随机数时，if语句在下一次执行时哪一个分支会被taken，具有非常大的不确定性，换句话说就是模式很混乱。而当vector中数据进行排序之后，此if语句大致上会在前2500次执行时选择if分支，后2500次执行时选择else分支，预测正确的难度低非常多。</p>
 <h2 id="结果">结果</h2>
 <p>On my MacBook Pro (16-inch, 2019):
 <img src="/images/cpu-branch-prediction-demo-1.png" alt=""></p>
@@ -138,7 +138,10 @@
 <p><a href="https://gist.github.com/zhuyie/1b7784d7fd457ada1ff45d3ce4771080">https://gist.github.com/zhuyie/1b7784d7fd457ada1ff45d3ce4771080</a> <a href="#fnref:2" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
 <li id="fn:3" role="doc-endnote">
-<p><a href="https://en.wikipedia.org/wiki/Branch_predictor#Implementation">https://en.wikipedia.org/wiki/Branch_predictor#Implementation</a> <a href="#fnref:3" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+<p><a href="https://en.wikipedia.org/wiki/Speculative_execution">https://en.wikipedia.org/wiki/Speculative_execution</a> <a href="#fnref:3" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+</li>
+<li id="fn:4" role="doc-endnote">
+<p><a href="https://xania.org/201602/bpu-part-two">https://xania.org/201602/bpu-part-two</a> <a href="#fnref:4" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
 </ol>
 </section>
