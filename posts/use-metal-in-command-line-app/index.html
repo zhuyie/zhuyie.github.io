@@ -8,8 +8,8 @@
 <meta property="og:description" content="在command line app中使用Metal的小坑。" />
 <meta property="og:type" content="article" />
 <meta property="og:url" content="https://zhuyie.github.io/posts/use-metal-in-command-line-app/" /><meta property="article:section" content="posts" />
-<meta property="article:published_time" content="2021-04-19T21:20:23&#43;08:00" />
-<meta property="article:modified_time" content="2021-04-19T21:20:23&#43;08:00" />
+<meta property="article:published_time" content="2021-04-19T21:20:23+08:00" />
+<meta property="article:modified_time" content="2021-04-19T21:20:23+08:00" />
 
 <meta name="twitter:card" content="summary"/>
 <meta name="twitter:title" content="在MacOS命令行程序中使用Metal"/>
@@ -51,7 +51,7 @@
 <p>那就开始用到自己的程序中吧！因为要与CPU/OpenCL等版本进行横向对比，很自然的Metal版本也使用了command line app的形式。代码写完编译很顺利，试跑一下，结果不对。。。</p>
 <p>作为老程序员，遇到这种事情很淡定。即使是测试用的小程序，我也加上了错误处理相关的代码（良好的编程素养！），那看一下错误输出，查一下文档，一般都能搞定。</p>
 <p>出错的代码位置是：</p>
-<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-objc" data-lang="objc">MTLCompileOptions<span style="color:#f92672">*</span> compileOptions <span style="color:#f92672">=</span> [MTLCompileOptions new];
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-objc" data-lang="objc">MTLCompileOptions<span style="color:#f92672">*</span> compileOptions <span style="color:#f92672">=</span> [MTLCompileOptions new];
 <span style="color:#66d9ef">id</span><span style="color:#f92672">&lt;</span>MTLLibrary<span style="color:#f92672">&gt;</span> lib <span style="color:#f92672">=</span> [device newLibraryWithSource:source
     options:compileOptions error:<span style="color:#f92672">&amp;</span>error];
 <span style="color:#66d9ef">if</span> (lib <span style="color:#f92672">==</span> nil)
@@ -60,13 +60,13 @@
     <span style="color:#66d9ef">return</span> nil;
 }
 </code></pre></div><p>而对应的错误输出为：</p>
-<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-fallback" data-lang="fallback">2021-04-19 22:00:10.546 estimate_pi_metal[3334:87426] Failed to create library: (null).
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-fallback" data-lang="fallback">2021-04-19 22:00:10.546 estimate_pi_metal[3334:87426] Failed to create library: (null).
 </code></pre></div><p>也就是：newLibraryWithSource执行失败返回了nil，与此同时error也为null。</p>
 <h2 id="官方文档">官方文档</h2>
 <p><a href="https://developer.apple.com/documentation/metal/mtldevice/1433431-newlibrarywithsource/">newLibraryWithSource官方文档</a>上对Return Value的说明：</p>
-<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-fallback" data-lang="fallback">A new library object that contains the compiled source code or nil if an error occurred.
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-fallback" data-lang="fallback">A new library object that contains the compiled source code or nil if an error occurred.
 </code></pre></div><p>对error参数的说明：</p>
-<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-fallback" data-lang="fallback">A pointer to an error object that describes source code compilation problems, if any. 
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-fallback" data-lang="fallback">A pointer to an error object that describes source code compilation problems, if any. 
 This object contains compiler errors if the returned library object is nil, and compiler warnings if the library was generated with warnings. 
 If the library was generated successfully, without errors or warnings, this error object is nil.
 </code></pre></div><p>那现在是个啥情况？</p>
@@ -74,7 +74,7 @@ If the library was generated successfully, without errors or warnings, this erro
 <p>此处省略一万字。</p>
 <h2 id="结果">结果</h2>
 <p>最后，在<a href="https://developer.apple.com/documentation/metal/1433401-mtlcreatesystemdefaultdevice">MTLCreateSystemDefaultDevice</a>的说明文档上看到这么一段：</p>
-<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-fallback" data-lang="fallback">In macOS, in order for the system to provide a default Metal device object, you must link to the CoreGraphics framework. 
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-fallback" data-lang="fallback">In macOS, in order for the system to provide a default Metal device object, you must link to the CoreGraphics framework. 
 You usually need to do this explicitly if you are writing apps that don&#39;t use graphics by default, such as command line tools.
 </code></pre></div><p>在CMakeLists.txt中加上<code>target_link_libraries(target_name ... &quot;-framework CoreGraphics&quot;)</code>再试，世界和平了。</p>
 

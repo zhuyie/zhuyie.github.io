@@ -8,8 +8,8 @@
 <meta property="og:description" content="Base64编码很多人都接触过，但还有很多其它的类似编码系统，熟悉的人可能就不是那么多了。" />
 <meta property="og:type" content="article" />
 <meta property="og:url" content="https://zhuyie.github.io/posts/binary-to-text-encoding/" /><meta property="article:section" content="posts" />
-<meta property="article:published_time" content="2021-08-09T09:56:58&#43;08:00" />
-<meta property="article:modified_time" content="2021-08-09T09:56:58&#43;08:00" />
+<meta property="article:published_time" content="2021-08-09T09:56:58+08:00" />
+<meta property="article:modified_time" content="2021-08-09T09:56:58+08:00" />
 
 <meta name="twitter:card" content="summary"/>
 <meta name="twitter:title" content="从Base16到Base85, 谈谈Binary-to-text编码"/>
@@ -104,7 +104,7 @@
 由于<code>log85(2^32) = 4.993</code>，同时<code>log84(2^32) = 5.006</code>，因此，85是能满足需求的最小base值。</p>
 <p>由此得到Base85。在字符集的选择上，Base85选择了一个连续区段，从33(&quot;!&quot;)到117(&ldquo;u&rdquo;)。在编码时，先将4字节二进制数据视为一个32位的二进制整数，转换为5位的85进制数，再将每一位加上33得到5个对应的ASCII字符，即为Base85编码后结果。</p>
 <p>看个例子：假定一个4字节数0x00010002，对应到10进制是65538。我们将它转换为85进制数：</p>
-<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-fallback" data-lang="fallback">65538 / 85 = 771 ... 3
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-fallback" data-lang="fallback">65538 / 85 = 771 ... 3
   771 / 85 = 9 ... 6
 
 因此结果5位85进制数为：0 0 9 6 3，我们验算一下：
@@ -121,19 +121,19 @@
 <hr>
 <ol>
 <li id="fn:1" role="doc-endnote">
-<p><a href="https://github.com/ocornut/imgui/blob/f99fe72c42bd5d578c2443409192b139b1c6623d/imgui_draw.cpp#L4088">https://github.com/ocornut/imgui/blob/f99fe72c42bd5d578c2443409192b139b1c6623d/imgui_draw.cpp#L4088</a> <a href="#fnref:1" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+<p><a href="https://github.com/ocornut/imgui/blob/f99fe72c42bd5d578c2443409192b139b1c6623d/imgui_draw.cpp#L4088">https://github.com/ocornut/imgui/blob/f99fe72c42bd5d578c2443409192b139b1c6623d/imgui_draw.cpp#L4088</a>&#160;<a href="#fnref:1" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
 <li id="fn:2" role="doc-endnote">
-<p><a href="https://en.wikipedia.org/wiki/Binary-to-text_encoding">https://en.wikipedia.org/wiki/Binary-to-text_encoding</a> <a href="#fnref:2" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+<p><a href="https://en.wikipedia.org/wiki/Binary-to-text_encoding">https://en.wikipedia.org/wiki/Binary-to-text_encoding</a>&#160;<a href="#fnref:2" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
 <li id="fn:3" role="doc-endnote">
-<p><a href="https://codebeautify.org/base64-encode">https://codebeautify.org/base64-encode</a> <a href="#fnref:3" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+<p><a href="https://codebeautify.org/base64-encode">https://codebeautify.org/base64-encode</a>&#160;<a href="#fnref:3" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
 <li id="fn:4" role="doc-endnote">
-<p><a href="https://en.bitcoin.it/wiki/Technical_background_of_version_1_Bitcoin_addresses">https://en.bitcoin.it/wiki/Technical_background_of_version_1_Bitcoin_addresses</a> <a href="#fnref:4" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+<p><a href="https://en.bitcoin.it/wiki/Technical_background_of_version_1_Bitcoin_addresses">https://en.bitcoin.it/wiki/Technical_background_of_version_1_Bitcoin_addresses</a>&#160;<a href="#fnref:4" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
 <li id="fn:5" role="doc-endnote">
-<p><a href="https://cryptii.com/pipes/ascii85-encoding">https://cryptii.com/pipes/ascii85-encoding</a> <a href="#fnref:5" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+<p><a href="https://cryptii.com/pipes/ascii85-encoding">https://cryptii.com/pipes/ascii85-encoding</a>&#160;<a href="#fnref:5" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
 </ol>
 </section>
