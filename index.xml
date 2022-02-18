@@ -7,7 +7,24 @@
     <generator>Hugo -- gohugo.io</generator>
     <language>en-us</language>
     <copyright>© zhuyie</copyright>
-    <lastBuildDate>Mon, 09 Aug 2021 09:56:58 +0800</lastBuildDate><atom:link href="https://zhuyie.github.io/index.xml" rel="self" type="application/rss+xml" />
+    <lastBuildDate>Wed, 16 Feb 2022 09:55:46 +0800</lastBuildDate><atom:link href="https://zhuyie.github.io/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>bsdiff源码解析</title>
+      <link>https://zhuyie.github.io/posts/bsdiff-annotated/</link>
+      <pubDate>Wed, 16 Feb 2022 09:55:46 +0800</pubDate>
+      
+      <guid>https://zhuyie.github.io/posts/bsdiff-annotated/</guid>
+      <description>简介 bsdiff是一种二进制增量编码（delta encoding1）算法。它由Colin Percival发明及开源，被广泛应用于各类二进制数据（特别是可执行程序）的增量更新（delta updates）场景中，例如Android使用bsdiff来减小OTA更新数据包的尺寸2。
+bsdiff的官网在https://www.daemonology.net/bsdiff/，它由bsdiff和bspatch两个模块组成，前者负责生成新版本相对于旧版本的增量数据，后者负责基于旧版本和增量数据还原出新版本。bsdiff目前的最新版本是（很多年发布的）4.3。
+作为一个典型的博士生作品，bsdiff源码的工程化水平相当一般，代码结构和风格、变量命名等都比较马虎。为了便于理解，这里结合4.3的源码进行一个详细点的分析。
+原理 Colin Percival有一篇3页的小论文Naive differences of executable code，描述了bsdiff算法的基本原理和思路。简单来说，源代码中的少量修改（例如增/删/改几行代码）反映到编译后的可执行文件上会出现修改量大幅度放大的情况。这主要是因为可执行文件中会记录很多地址类数据（例如分支语句的跳转目标），大量的地址会因为少量源代码的修改而出现位移。此时如果按照传统的copy-and-insert方法来构造binary patch，效率会相当低下。在作者的实验中，一个500kB左右的可执行程序（按常规经验至少对应10万行以上的C源码）的源码中进行1行修改，会产生约50kB的patch文件。
+对这个问题的一种可能的处理方法是，在算法上加入对可执行文件的格式和内部结构的理解。例如通过反汇编的方式将可执行文件还原为类汇编源码的形态，再对新旧两个版本的源码进行增量编码。这种方法的问题是算法复杂且和特定平台相关。Google的Courgette就用了这种思路。
+bsdiff的目标是以平台无关的方式解决上述问题。它基于两个重要观察：
+ 在可执行文件的与源码修改无直接对应关系的区域，所产生的差异是相当稀疏的（sparse）：(a)地址位移仅影响到部分的编译后指令；(b)地址位移的幅度一般较小，很多时候只影响到地址字的最后1～2个字节； 数据和代码倾向于按整块的方式移动，通常存在很多“块”，其中的地址位移都按相同的差值发生了变化；  由此可以想到，如果找出某个可执行程序的两个版本中那些对应源码没有改动的区域，对这些区域按字节计算差值（bytewise differences），其结果应该会存在很多0（因为内容相同），即使不为0也经常会出现高频重复值。换句话说，这些差值结果具有很高的可压缩性（highly compressible）。
+源码解析 patchfile format 这部分在bspatch.c中有较详细的注释：
+/* File format: 0	8	&amp;#34;BSDIFF40&amp;#34; 8	8	X 16	8	Y 24	8	sizeof(newfile) 32	X	bzip2(control block) 32+X	Y	bzip2(diff block) 32+X+Y	???	bzip2(extra block) with control block a set of triples (x,y,z) meaning &amp;#34;add x bytes from oldfile to x bytes from the diff block; copy y bytes from the extra block; seek forwards in oldfile by z bytes&amp;#34;.</description>
+    </item>
+    
     <item>
       <title>从Base16到Base85, 谈谈Binary-to-text编码</title>
       <link>https://zhuyie.github.io/posts/binary-to-text-encoding/</link>

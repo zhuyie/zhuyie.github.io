@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html><head>
+	<meta charset="utf-8" />
+	<meta http-equiv="X-UA-Compatible" content="IE=edge"><title>bsdiff源码解析 - zhuyie&#39;s blog</title><meta name="viewport" content="width=device-width, initial-scale=1">
+
+	<meta property="og:image" content=""/>
+	<meta property="og:title" content="bsdiff源码解析" />
+<meta property="og:description" content="bsdiff是一种二进制增量编码（delta encoding）算法。它由Colin Percival发明及开源，被广泛应用于各类二进制数据（特别是可执行程序）的增量更新（delta updates）场景中。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://zhuyie.github.io/posts/bsdiff-annotated/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2022-02-16T09:55:46+08:00" />
+<meta property="article:modified_time" content="2022-02-16T09:55:46+08:00" />
+
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="bsdiff源码解析"/>
+<meta name="twitter:description" content="bsdiff是一种二进制增量编码（delta encoding）算法。它由Colin Percival发明及开源，被广泛应用于各类二进制数据（特别是可执行程序）的增量更新（delta updates）场景中。"/>
+<script src="https://zhuyie.github.io/js/feather.min.js"></script>
+	
+	<link href="https://zhuyie.github.io/css/fonts.css" rel="stylesheet">
+	
+	<link rel="stylesheet" type="text/css" media="screen" href="https://zhuyie.github.io/css/main.css" /><link rel="stylesheet" type="text/css" href="https://zhuyie.github.io/css/dark.css" media="(prefers-color-scheme: dark)" />
+	
+	
+</head>
+<body>
+        <div class="content"><header>
+	<div class="main">
+		<a href="https://zhuyie.github.io/">zhuyie&#39;s blog</a>
+	</div>
+	<nav>
+		
+		<a href="/">Home</a>
+		
+		<a href="/posts">All posts</a>
+		
+	</nav>
+</header>
+
+<main>
+	<article>
+		<div class="title">
+			<h1 class="title">bsdiff源码解析</h1>
+			<div class="meta">Posted on Feb 16, 2022</div>
+		</div>
+		
+
+		<section class="body">
+			<h2 id="简介">简介</h2>
+<p>bsdiff是一种二进制增量编码（delta encoding<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup>）算法。它由Colin Percival发明及开源，被广泛应用于各类二进制数据（特别是可执行程序）的增量更新（delta updates）场景中，例如Android使用bsdiff来减小OTA更新数据包的尺寸<sup id="fnref:2"><a href="#fn:2" class="footnote-ref" role="doc-noteref">2</a></sup>。</p>
+<p>bsdiff的官网在<a href="https://www.daemonology.net/bsdiff/">https://www.daemonology.net/bsdiff/</a>，它由bsdiff和bspatch两个模块组成，前者负责生成<strong>新版本</strong>相对于<strong>旧版本</strong>的<em>增量数据</em>，后者负责基于<strong>旧版本</strong>和<strong>增量数据</strong>还原出<em>新版本</em>。bsdiff目前的最新版本是（很多年发布的）<a href="https://www.daemonology.net/bsdiff/bsdiff-4.3.tar.gz">4.3</a>。</p>
+<p>作为一个典型的博士生作品，bsdiff源码的工程化水平相当一般，代码结构和风格、变量命名等都比较马虎。为了便于理解，这里结合4.3的源码进行一个详细点的分析。</p>
+<h2 id="原理">原理</h2>
+<p>Colin Percival有一篇3页的小论文<a href="https://www.daemonology.net/papers/bsdiff.pdf">Naive differences of executable code</a>，描述了bsdiff算法的基本原理和思路。简单来说，源代码中的少量修改（例如增/删/改几行代码）反映到编译后的可执行文件上会出现<strong>修改量大幅度放大</strong>的情况。这主要是因为可执行文件中会记录很多地址类数据（例如分支语句的跳转目标），大量的地址会因为少量源代码的修改而出现<strong>位移</strong>。此时如果按照传统的copy-and-insert方法来构造binary patch，效率会相当低下。在作者的实验中，一个500kB左右的可执行程序（按常规经验至少对应10万行以上的C源码）的源码中进行1行修改，会产生约50kB的patch文件。</p>
+<p>对这个问题的一种可能的处理方法是，在算法上加入对可执行文件的<strong>格式</strong>和<strong>内部结构</strong>的理解。例如通过<strong>反汇编</strong>的方式将可执行文件还原为类汇编源码的形态，再对新旧两个版本的源码进行增量编码。这种方法的问题是<strong>算法复杂且和特定平台相关</strong>。Google的<a href="https://www.chromium.org/developers/design-documents/software-updates-courgette/">Courgette</a>就用了这种思路。</p>
+<p>bsdiff的目标是以<strong>平台无关</strong>的方式解决上述问题。它基于两个重要观察：</p>
+<ul>
+<li>在可执行文件的与源码修改无直接对应关系的区域，所产生的差异是相当稀疏的（sparse）：(a)地址位移仅影响到部分的编译后指令；(b)地址位移的幅度一般较小，很多时候只影响到地址字的最后1～2个字节；</li>
+<li>数据和代码倾向于按整块的方式移动，通常存在很多“块”，其中的地址位移都按相同的差值发生了变化；</li>
+</ul>
+<p>由此可以想到，如果找出某个可执行程序的两个版本中那些对应源码没有改动的区域，对这些区域按字节计算差值（bytewise differences），其结果应该会存在很多0（因为内容相同），即使不为0也经常会出现高频重复值。换句话说，这些差值结果具有<strong>很高的可压缩性</strong>（highly compressible）。</p>
+<h2 id="源码解析">源码解析</h2>
+<h3 id="patchfile-format">patchfile format</h3>
+<p>这部分在bspatch.c中有较详细的注释：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c" data-lang="c"><span style="color:#75715e">/*
+</span><span style="color:#75715e">File format:
+</span><span style="color:#75715e">	0	8	&#34;BSDIFF40&#34;
+</span><span style="color:#75715e">	8	8	X
+</span><span style="color:#75715e">	16	8	Y
+</span><span style="color:#75715e">	24	8	sizeof(newfile)
+</span><span style="color:#75715e">	32	X	bzip2(control block)
+</span><span style="color:#75715e">	32+X	Y	bzip2(diff block)
+</span><span style="color:#75715e">	32+X+Y	???	bzip2(extra block)
+</span><span style="color:#75715e">with control block a set of triples (x,y,z) meaning &#34;add x bytes
+</span><span style="color:#75715e">from oldfile to x bytes from the diff block; copy y bytes from the
+</span><span style="color:#75715e">extra block; seek forwards in oldfile by z bytes&#34;.
+</span><span style="color:#75715e">*/</span>
+</code></pre></div><p>依次为：</p>
+<ul>
+<li>文件格式签名，8字节常量&quot;BSDIFF40&quot;；</li>
+<li>control block压缩流的长度（X），8字节整数；</li>
+<li>diff block压缩流的长度（Y），8字节整数；</li>
+<li>newfile的长度，8字节整数；</li>
+<li>control block压缩流，长度为X字节；</li>
+<li>diff block压缩流，长度为Y字节；</li>
+<li>extra block压缩流；</li>
+</ul>
+<p>其中的control block是一个数组，其每个元素为3个8字节整数所组成的三元组（x, y, z）。对这个三元组各部分的注释，直接的描述了<strong>bspatch主循环</strong>中每次所执行的逻辑：</p>
+<ol>
+<li>从diff block和oldfile的当前位置分别读取x个字节，按字节分别相加，结果写入到newfile；</li>
+<li>从extra block读取y个字节（y可能为0），直接写入到newfile；</li>
+<li>调整oldfile的当前位置，增加z个字节；注意z可能为<strong>负数</strong>；</li>
+</ol>
+<p>上述的8字节整数，均采用了64位big-endian<sup id="fnref:3"><a href="#fn:3" class="footnote-ref" role="doc-noteref">3</a></sup>编码，bspatch.c中的<code>offtin</code>函数和bsdiff.c中的<code>offtout</code>函数用于处理它与host中<code>off_t</code>类型的互转。</p>
+<p>此外，control block, diff block和extra block都使用bzip<sup id="fnref:4"><a href="#fn:4" class="footnote-ref" role="doc-noteref">4</a></sup>算法进行了压缩。这些压缩是patch文件实际尺寸会减小的原因，而算法本身只是负责构建出这些具有高压缩性的数据。</p>
+<h3 id="bspatch">bspatch</h3>
+<p>搞懂了patchfile的格式以后，bspatch的逻辑就很容易理解了：</p>
+<ul>
+<li>打开patchfile，校验文件头，从对应位置打开3个bzip文件句柄，分别用于读取control block, diff block和extra block；</li>
+<li>打开oldfile，将其完整内容读取到内存中；</li>
+<li>从patchfile中取得newfile的长度newsize，分配出对应长度的内存缓冲区newfile；</li>
+<li>设置两个变量oldpos和newpos，分别表示oldfile和newfile中当前读/写的位置。进入主循环：
+<ul>
+<li>从control block中读取1个控制三元组（x, y, z）；</li>
+<li>从diff block中读取x个字节，写入到newfile中newpos开始的位置，再将每个字节依次加上oldfile中oldpos开始的对应字节；<code>oldpos+=x &amp;&amp; newpos+=x</code>；</li>
+<li>从extra block中读取y个字节，写入到newfile中newpos开始的位置；<code>newpos+=y</code>；</li>
+<li><code>oldpos+=z</code>；</li>
+<li>当<code>newpos&gt;=newsize</code>时退出循环；</li>
+</ul>
+</li>
+<li>至此，newfile的内容已经重建完毕，将其写入到文件；</li>
+</ul>
+<h3 id="bsdiff">bsdiff</h3>
+<p>现在我们已经知道，patch文件中包含了3个子文件control block, diff block和extra block，对后两者的使用由control block中的一系列ctrl三元组数据来控制。具体到某一个ctrl三元组来说，它可能包括一个<strong>diff区段</strong>和一个<strong>extra区段</strong>。diff区段通过和oldfile中的内容相加后还原newfile，这是前述原理中求差值操作的逆运算，因此对应的是一个“与源码修改无直接对应关系的区域”。而extra区段被直接写入newfile，因此对应的是“存在源码修改的区域”。extra区段不一定存在，两者<strong>相连</strong>且<strong>先后顺序固定</strong>。</p>
+<p>因此，bsdiff算法的核心，就是对newfile<strong>从前向后尝试</strong>，在oldfile中<strong>搜寻</strong>一个和newfile当前位置开始的内容<strong>近似匹配</strong>（approximate matches）的<strong>对应区段</strong>，这个近似匹配中包含一段“与源码修改无直接关系的区域”，可能再跟着一段“存在源码修改的区域”。基于这个对应区段构建一组ctrl以及相关联的diff和extra数据。持续此过程直至newfile文件结束，然后将所得的control block, diff block和extra block按前述文件格式生成patch文件。</p>
+<p>接下来我们实际看下bsdiff.c的流程。</p>
+<p>◈ 首先是判断输入参数是否合法。程序需要3个参数，argv[1], argv[2]和argv[3]分别对应oldfile, newfile和patchfile的文件路径。</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c" data-lang="c">	<span style="color:#66d9ef">if</span>(argc<span style="color:#f92672">!=</span><span style="color:#ae81ff">4</span>) errx(<span style="color:#ae81ff">1</span>,<span style="color:#e6db74">&#34;usage: %s oldfile newfile patchfile</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#34;</span>,argv[<span style="color:#ae81ff">0</span>]);
+</code></pre></div><p>◈ 打开oldfile，分配对应大小的buffer，将文件内容读取到内存buffer中。之所以要malloc(oldsize+1)是因为oldsize<strong>可能为0</strong>，与之相对的newsize也可能为0。</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c" data-lang="c">	<span style="color:#75715e">/* Allocate oldsize+1 bytes instead of oldsize bytes to ensure
+</span><span style="color:#75715e">		that we never try to malloc(0) and get a NULL pointer */</span>
+	<span style="color:#66d9ef">if</span>(((fd<span style="color:#f92672">=</span>open(argv[<span style="color:#ae81ff">1</span>],O_RDONLY,<span style="color:#ae81ff">0</span>))<span style="color:#f92672">&lt;</span><span style="color:#ae81ff">0</span>) <span style="color:#f92672">||</span>
+		((oldsize<span style="color:#f92672">=</span>lseek(fd,<span style="color:#ae81ff">0</span>,SEEK_END))<span style="color:#f92672">==-</span><span style="color:#ae81ff">1</span>) <span style="color:#f92672">||</span>
+		((old<span style="color:#f92672">=</span>malloc(oldsize<span style="color:#f92672">+</span><span style="color:#ae81ff">1</span>))<span style="color:#f92672">==</span>NULL) <span style="color:#f92672">||</span>
+		(lseek(fd,<span style="color:#ae81ff">0</span>,SEEK_SET)<span style="color:#f92672">!=</span><span style="color:#ae81ff">0</span>) <span style="color:#f92672">||</span>
+		(read(fd,old,oldsize)<span style="color:#f92672">!=</span>oldsize) <span style="color:#f92672">||</span>
+		(close(fd)<span style="color:#f92672">==-</span><span style="color:#ae81ff">1</span>)) err(<span style="color:#ae81ff">1</span>,<span style="color:#e6db74">&#34;%s&#34;</span>,argv[<span style="color:#ae81ff">1</span>]);
+</code></pre></div><p>◈ 基于oldfile的内容构建一个<strong>后缀数组</strong>（suffix array<sup id="fnref:5"><a href="#fn:5" class="footnote-ref" role="doc-noteref">5</a></sup>），用于后面在oldfile中快速搜索与newfile中内容匹配的区域。bsdiff使用qsufsort来进行后缀排序，这个算法需要用到两个额外数组I和V，其中I用于保存结果后缀数组，V为辅助空间，执行完就可以释放。</p>
+<p>可以不去理解qsufsort函数（及其辅助函数split）的内部实现。首先把它当成<strong>黑盒</strong>不影响对bsdiff流程的理解，只要你知道suffix array是什么东西；其次qsufsort在今天看起来并不是一个很好的后缀排序实现，可以考虑将它替换成其它更优的库。</p>
+<p>需要关注的点是这块的内存占用。off_t在32位环境下一般typedef为int，占用4字节。设oldfile的size为n，则I和V这两个数组会占用8n的内存空间，再加上之前已经加载到内存的一份oldfile，我们的<strong>峰值内存需求</strong>已经达到了9n！如果要考虑64位就更加恐怖了。</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c" data-lang="c">	<span style="color:#66d9ef">if</span>(((I<span style="color:#f92672">=</span>malloc((oldsize<span style="color:#f92672">+</span><span style="color:#ae81ff">1</span>)<span style="color:#f92672">*</span><span style="color:#66d9ef">sizeof</span>(off_t)))<span style="color:#f92672">==</span>NULL) <span style="color:#f92672">||</span>
+		((V<span style="color:#f92672">=</span>malloc((oldsize<span style="color:#f92672">+</span><span style="color:#ae81ff">1</span>)<span style="color:#f92672">*</span><span style="color:#66d9ef">sizeof</span>(off_t)))<span style="color:#f92672">==</span>NULL)) err(<span style="color:#ae81ff">1</span>,NULL);
+
+	qsufsort(I,V,old,oldsize);
+
+	free(V);
+</code></pre></div><p>◈ 将newfile读取到内存中：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c" data-lang="c">	<span style="color:#75715e">/* Allocate newsize+1 bytes instead of newsize bytes to ensure
+</span><span style="color:#75715e">		that we never try to malloc(0) and get a NULL pointer */</span>
+	<span style="color:#66d9ef">if</span>(((fd<span style="color:#f92672">=</span>open(argv[<span style="color:#ae81ff">2</span>],O_RDONLY,<span style="color:#ae81ff">0</span>))<span style="color:#f92672">&lt;</span><span style="color:#ae81ff">0</span>) <span style="color:#f92672">||</span>
+		((newsize<span style="color:#f92672">=</span>lseek(fd,<span style="color:#ae81ff">0</span>,SEEK_END))<span style="color:#f92672">==-</span><span style="color:#ae81ff">1</span>) <span style="color:#f92672">||</span>
+		((new<span style="color:#f92672">=</span>malloc(newsize<span style="color:#f92672">+</span><span style="color:#ae81ff">1</span>))<span style="color:#f92672">==</span>NULL) <span style="color:#f92672">||</span>
+		(lseek(fd,<span style="color:#ae81ff">0</span>,SEEK_SET)<span style="color:#f92672">!=</span><span style="color:#ae81ff">0</span>) <span style="color:#f92672">||</span>
+		(read(fd,new,newsize)<span style="color:#f92672">!=</span>newsize) <span style="color:#f92672">||</span>
+		(close(fd)<span style="color:#f92672">==-</span><span style="color:#ae81ff">1</span>)) err(<span style="color:#ae81ff">1</span>,<span style="color:#e6db74">&#34;%s&#34;</span>,argv[<span style="color:#ae81ff">2</span>]);
+</code></pre></div><p>◈ 为db和eb这两个buffer分配内存。这两个buffer对应的是子文件diff block和extra block，其内容会在后面的步骤中逐渐写入。dblen和eblen用于描述它们当前有效数据的长度。</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c" data-lang="c">	<span style="color:#66d9ef">if</span>(((db<span style="color:#f92672">=</span>malloc(newsize<span style="color:#f92672">+</span><span style="color:#ae81ff">1</span>))<span style="color:#f92672">==</span>NULL) <span style="color:#f92672">||</span>
+		((eb<span style="color:#f92672">=</span>malloc(newsize<span style="color:#f92672">+</span><span style="color:#ae81ff">1</span>))<span style="color:#f92672">==</span>NULL)) err(<span style="color:#ae81ff">1</span>,NULL);
+	dblen<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;
+	eblen<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;
+</code></pre></div><p>◈ 创建patchfile，写入一个用来占位的文件头，其内容在主循环走完以后还会再更新。</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c" data-lang="c">	<span style="color:#75715e">/* Create the patch file */</span>
+	<span style="color:#66d9ef">if</span> ((pf <span style="color:#f92672">=</span> fopen(argv[<span style="color:#ae81ff">3</span>], <span style="color:#e6db74">&#34;w&#34;</span>)) <span style="color:#f92672">==</span> NULL)
+		err(<span style="color:#ae81ff">1</span>, <span style="color:#e6db74">&#34;%s&#34;</span>, argv[<span style="color:#ae81ff">3</span>]);
+
+	memcpy(header,<span style="color:#e6db74">&#34;BSDIFF40&#34;</span>,<span style="color:#ae81ff">8</span>);
+	offtout(<span style="color:#ae81ff">0</span>, header <span style="color:#f92672">+</span> <span style="color:#ae81ff">8</span>);
+	offtout(<span style="color:#ae81ff">0</span>, header <span style="color:#f92672">+</span> <span style="color:#ae81ff">16</span>);
+	offtout(newsize, header <span style="color:#f92672">+</span> <span style="color:#ae81ff">24</span>);
+	<span style="color:#66d9ef">if</span> (fwrite(header, <span style="color:#ae81ff">32</span>, <span style="color:#ae81ff">1</span>, pf) <span style="color:#f92672">!=</span> <span style="color:#ae81ff">1</span>)
+		err(<span style="color:#ae81ff">1</span>, <span style="color:#e6db74">&#34;fwrite(%s)&#34;</span>, argv[<span style="color:#ae81ff">3</span>]);
+</code></pre></div><p>◈ pf的当前file position为32，此时基于pf创建一个bzip文件句柄（因此结果bzip压缩流会写入在32字节偏移开始的区域），用于control block的写入：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c" data-lang="c">	<span style="color:#75715e">/* Compute the differences, writing ctrl as we go */</span>
+	<span style="color:#66d9ef">if</span> ((pfbz2 <span style="color:#f92672">=</span> BZ2_bzWriteOpen(<span style="color:#f92672">&amp;</span>bz2err, pf, <span style="color:#ae81ff">9</span>, <span style="color:#ae81ff">0</span>, <span style="color:#ae81ff">0</span>)) <span style="color:#f92672">==</span> NULL)
+		errx(<span style="color:#ae81ff">1</span>, <span style="color:#e6db74">&#34;BZ2_bzWriteOpen, bz2err = %d&#34;</span>, bz2err);
+</code></pre></div><p>◈ 接下来是主循环了，这部分逻辑较为复杂，我们先将它进行简化，整理出结构。</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c" data-lang="c">	scan<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;len<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;
+	lastscan<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;lastpos<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;lastoffset<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;
+	<span style="color:#75715e">// 循环处理整个newfile
+</span><span style="color:#75715e"></span>	<span style="color:#66d9ef">while</span>(scan<span style="color:#f92672">&lt;</span>newsize) {
+		oldscore<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;
+
+		<span style="color:#75715e">// 从scan开始向后搜索，符合某种条件时跳出循环
+</span><span style="color:#75715e"></span>		<span style="color:#66d9ef">for</span>(scsc<span style="color:#f92672">=</span>scan<span style="color:#f92672">+=</span>len;scan<span style="color:#f92672">&lt;</span>newsize;scan<span style="color:#f92672">++</span>) {
+			...
+		};
+
+		<span style="color:#75715e">// len!=oldscore说明找到了一个符合条件的近似匹配区域；scan==newsize说明已经已到达文件尾；
+</span><span style="color:#75715e"></span>		<span style="color:#75715e">// 符合这两个条件之一时，我们开始处理当前这个近似匹配区域；
+</span><span style="color:#75715e"></span>		<span style="color:#66d9ef">if</span>((len<span style="color:#f92672">!=</span>oldscore) <span style="color:#f92672">||</span> (scan<span style="color:#f92672">==</span>newsize)) {
+			<span style="color:#75715e">// 确定lenf的长度。区域[lastscan, lastscan+lenf)被称为forward extension
+</span><span style="color:#75715e"></span>			s<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;Sf<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;lenf<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;
+			<span style="color:#66d9ef">for</span>(i<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;(lastscan<span style="color:#f92672">+</span>i<span style="color:#f92672">&lt;</span>scan)<span style="color:#f92672">&amp;&amp;</span>(lastpos<span style="color:#f92672">+</span>i<span style="color:#f92672">&lt;</span>oldsize);) {
+				...
+			};
+
+			<span style="color:#75715e">// 确定lenb的长度。区域[scan-lenb, scan-1]被称为backward extension
+</span><span style="color:#75715e"></span>			lenb<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;
+			<span style="color:#66d9ef">if</span>(scan<span style="color:#f92672">&lt;</span>newsize) {
+				s<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;Sb<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;
+				<span style="color:#66d9ef">for</span>(i<span style="color:#f92672">=</span><span style="color:#ae81ff">1</span>;(scan<span style="color:#f92672">&gt;=</span>lastscan<span style="color:#f92672">+</span>i)<span style="color:#f92672">&amp;&amp;</span>(pos<span style="color:#f92672">&gt;=</span>i);i<span style="color:#f92672">++</span>) {
+					...
+				};
+			};
+
+			<span style="color:#66d9ef">if</span>(lastscan<span style="color:#f92672">+</span>lenf<span style="color:#f92672">&gt;</span>scan<span style="color:#f92672">-</span>lenb) {
+				<span style="color:#75715e">// forword extension和backward extension区域出现重叠时需要调整lenf和lenb
+</span><span style="color:#75715e"></span>				...
+			};
+
+			<span style="color:#75715e">// forward extension即为diff区段，减去old中对应位置的值，结果写到db中
+</span><span style="color:#75715e"></span>			<span style="color:#66d9ef">for</span>(i<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;i<span style="color:#f92672">&lt;</span>lenf;i<span style="color:#f92672">++</span>)
+				db[dblen<span style="color:#f92672">+</span>i]<span style="color:#f92672">=</span>new[lastscan<span style="color:#f92672">+</span>i]<span style="color:#f92672">-</span>old[lastpos<span style="color:#f92672">+</span>i];
+			<span style="color:#75715e">// forward extension和backward extension若不相连，两者中间的区域
+</span><span style="color:#75715e"></span>			<span style="color:#75715e">// 即为extra区段，其内容直接复制到eb中
+</span><span style="color:#75715e"></span>			<span style="color:#66d9ef">for</span>(i<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;i<span style="color:#f92672">&lt;</span>(scan<span style="color:#f92672">-</span>lenb)<span style="color:#f92672">-</span>(lastscan<span style="color:#f92672">+</span>lenf);i<span style="color:#f92672">++</span>)
+				eb[eblen<span style="color:#f92672">+</span>i]<span style="color:#f92672">=</span>new[lastscan<span style="color:#f92672">+</span>lenf<span style="color:#f92672">+</span>i];
+
+			dblen<span style="color:#f92672">+=</span>lenf;
+			eblen<span style="color:#f92672">+=</span>(scan<span style="color:#f92672">-</span>lenb)<span style="color:#f92672">-</span>(lastscan<span style="color:#f92672">+</span>lenf);
+
+			<span style="color:#75715e">// 写入三元组的x
+</span><span style="color:#75715e"></span>			offtout(lenf,buf);
+			...
+			<span style="color:#75715e">// 写入三元组的y
+</span><span style="color:#75715e"></span>			offtout((scan<span style="color:#f92672">-</span>lenb)<span style="color:#f92672">-</span>(lastscan<span style="color:#f92672">+</span>lenf),buf);
+			...
+			<span style="color:#75715e">// 写入三元组的z
+</span><span style="color:#75715e"></span>			offtout((pos<span style="color:#f92672">-</span>lenb)<span style="color:#f92672">-</span>(lastpos<span style="color:#f92672">+</span>lenf),buf);
+			...
+
+			<span style="color:#75715e">// backward extension会被作为下一轮近似匹配区域的开始部分，
+</span><span style="color:#75715e"></span>			<span style="color:#75715e">// 也就是变成下一次的forward extension的一部分
+</span><span style="color:#75715e"></span>			lastscan<span style="color:#f92672">=</span>scan<span style="color:#f92672">-</span>lenb;
+			lastpos<span style="color:#f92672">=</span>pos<span style="color:#f92672">-</span>lenb;
+			lastoffset<span style="color:#f92672">=</span>pos<span style="color:#f92672">-</span>scan;
+		};
+	};
+</code></pre></div><p>细看下确定scan, len和oldscore的逻辑：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c" data-lang="c">		oldscore<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;
+
+		<span style="color:#66d9ef">for</span>(scsc<span style="color:#f92672">=</span>scan<span style="color:#f92672">+=</span>len;scan<span style="color:#f92672">&lt;</span>newsize;scan<span style="color:#f92672">++</span>) {
+			<span style="color:#75715e">// 这里对new中scan处开始的内容，在old中搜索一个完全匹配区域。
+</span><span style="color:#75715e"></span>			<span style="color:#75715e">// len返回完全匹配区域的长度，pos为old中与scan所对应的位置。
+</span><span style="color:#75715e"></span>			<span style="color:#75715e">// search函数是一个标准的二分查找算法，I是前面构建出来的后缀数组。
+</span><span style="color:#75715e"></span>			len<span style="color:#f92672">=</span>search(I,old,oldsize,new<span style="color:#f92672">+</span>scan,newsize<span style="color:#f92672">-</span>scan,
+					<span style="color:#ae81ff">0</span>,oldsize,<span style="color:#f92672">&amp;</span>pos);
+
+			<span style="color:#75715e">// lastoffset是前一次“近似匹配”时的pos-scan。
+</span><span style="color:#75715e"></span>			<span style="color:#75715e">// 这里统计new中[scan, scan+len)与old中前一次近似匹配区域的对应延伸区段中相等的字节数，
+</span><span style="color:#75715e"></span>			<span style="color:#75715e">// 累加到oldscore中。
+</span><span style="color:#75715e"></span>			<span style="color:#66d9ef">for</span>(;scsc<span style="color:#f92672">&lt;</span>scan<span style="color:#f92672">+</span>len;scsc<span style="color:#f92672">++</span>)
+			<span style="color:#66d9ef">if</span>((scsc<span style="color:#f92672">+</span>lastoffset<span style="color:#f92672">&lt;</span>oldsize) <span style="color:#f92672">&amp;&amp;</span>
+				(old[scsc<span style="color:#f92672">+</span>lastoffset] <span style="color:#f92672">==</span> new[scsc]))
+				oldscore<span style="color:#f92672">++</span>;
+
+			<span style="color:#75715e">// 这里对应论文中的“we only record regions which contain at least 8 bytes 
+</span><span style="color:#75715e"></span>			<span style="color:#75715e">// not matching the forward-extension of the previous match”
+</span><span style="color:#75715e"></span>			<span style="color:#66d9ef">if</span>(((len<span style="color:#f92672">==</span>oldscore) <span style="color:#f92672">&amp;&amp;</span> (len<span style="color:#f92672">!=</span><span style="color:#ae81ff">0</span>)) <span style="color:#f92672">||</span> 
+				(len<span style="color:#f92672">&gt;</span>oldscore<span style="color:#f92672">+</span><span style="color:#ae81ff">8</span>)) <span style="color:#66d9ef">break</span>;
+
+			<span style="color:#75715e">// 还没理解^_^
+</span><span style="color:#75715e"></span>			<span style="color:#66d9ef">if</span>((scan<span style="color:#f92672">+</span>lastoffset<span style="color:#f92672">&lt;</span>oldsize) <span style="color:#f92672">&amp;&amp;</span>
+				(old[scan<span style="color:#f92672">+</span>lastoffset] <span style="color:#f92672">==</span> new[scan]))
+				oldscore<span style="color:#f92672">--</span>;
+		};
+</code></pre></div><p>再看一下确定lenf长度部分的逻辑，后面的lenb，以及lenf和lenb重叠时的处理，逻辑类似：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c" data-lang="c">			s<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;Sf<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;lenf<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;
+			<span style="color:#75715e">// 从lastscan开始向后搜索，上界为scan
+</span><span style="color:#75715e"></span>			<span style="color:#66d9ef">for</span>(i<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;(lastscan<span style="color:#f92672">+</span>i<span style="color:#f92672">&lt;</span>scan)<span style="color:#f92672">&amp;&amp;</span>(lastpos<span style="color:#f92672">+</span>i<span style="color:#f92672">&lt;</span>oldsize);) {
+				<span style="color:#75715e">// s记录对应字节相等的次数
+</span><span style="color:#75715e"></span>				<span style="color:#66d9ef">if</span>(old[lastpos<span style="color:#f92672">+</span>i]<span style="color:#f92672">==</span>new[lastscan<span style="color:#f92672">+</span>i]) s<span style="color:#f92672">++</span>;
+				i<span style="color:#f92672">++</span>;
+				<span style="color:#75715e">// Sf保存着lenf更新时对应的s，两者的初始值均为0，因此这个判断最开始
+</span><span style="color:#75715e"></span>				<span style="color:#75715e">// 相当于if(s*2-i&gt;0)，也就是是否有50%以上的i对应的字节是相同的。
+</span><span style="color:#75715e"></span>				<span style="color:#75715e">// 在lenf更新过1次以后，这个判断相当于比较当前相同比率是否比前一次候选
+</span><span style="color:#75715e"></span>				<span style="color:#75715e">// lenf所对应的相同比率更高。
+</span><span style="color:#75715e"></span>				<span style="color:#66d9ef">if</span>(s<span style="color:#f92672">*</span><span style="color:#ae81ff">2</span><span style="color:#f92672">-</span>i<span style="color:#f92672">&gt;</span>Sf<span style="color:#f92672">*</span><span style="color:#ae81ff">2</span><span style="color:#f92672">-</span>lenf) { Sf<span style="color:#f92672">=</span>s; lenf<span style="color:#f92672">=</span>i; };
+			};
+</code></pre></div><p>◈ 最后的收尾部分注释较多，逻辑也比较直白：</p>
+<ul>
+<li>写完control block压缩流；</li>
+<li>将db的内容写入一个新的bzip压缩流，也就是diff block子文件；</li>
+<li>将eb的内容写入一个新的bzip压缩流，也就是extra block子文件；</li>
+<li>更新文件头中两个子文件长度X和Y（之前仅仅做了占位）；</li>
+</ul>
+<h2 id="可能需要改进的点">可能需要改进的点</h2>
+<p>首先是内存占用需求较高（设oldfile的size为n，newfile的size为m）：</p>
+<ol>
+<li>patch流程的内存需求为<code>n+m+O(1)</code>。因为patch流程通常在客户端运行，内存资源受限的可能性比较大。</li>
+<li>diff流程的内存需求在32位时为<code>max(9n,5n+3m)+O(1)</code>，前面的9n对应后缀数组构建的阶段，后面的5n+3m对应扫描阶段。以250MB左右的文件为例，9n为2250MB，这已经超过了很多32位操作系统中用户态程序的可用地址空间（例如Windows通常为2GB）。</li>
+</ol>
+<p>其次是运行性能。qsufsort的性能比较一般，可以考虑用更好的后缀排序库来代替（例如libdivsufsort<sup id="fnref:6"><a href="#fn:6" class="footnote-ref" role="doc-noteref">6</a></sup>）。bzip2以今天的眼光看在压缩率、性能上也算不上优秀，可以考虑更换压缩算法和压缩库。整体代码对性能优化考虑较少，存在很多不必要的seek动作和小数据量的IO动作。</p>
+<p>最后还存在一些安全性漏洞，例如CVE-2014-9862<sup id="fnref:7"><a href="#fn:7" class="footnote-ref" role="doc-noteref">7</a></sup>。</p>
+<h2 id="references">References</h2>
+<section class="footnotes" role="doc-endnotes">
+<hr>
+<ol>
+<li id="fn:1" role="doc-endnote">
+<p><a href="https://en.wikipedia.org/wiki/Delta_encoding">https://en.wikipedia.org/wiki/Delta_encoding</a>&#160;<a href="#fnref:1" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+</li>
+<li id="fn:2" role="doc-endnote">
+<p><a href="https://source.android.com/devices/tech/ota/reduce_size">https://source.android.com/devices/tech/ota/reduce_size</a>&#160;<a href="#fnref:2" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+</li>
+<li id="fn:3" role="doc-endnote">
+<p><a href="https://betterexplained.com/articles/understanding-big-and-little-endian-byte-order/">https://betterexplained.com/articles/understanding-big-and-little-endian-byte-order/</a>&#160;<a href="#fnref:3" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+</li>
+<li id="fn:4" role="doc-endnote">
+<p><a href="https://www.sourceware.org/bzip2/">https://www.sourceware.org/bzip2/</a>&#160;<a href="#fnref:4" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+</li>
+<li id="fn:5" role="doc-endnote">
+<p><a href="https://en.wikipedia.org/wiki/Suffix_array">https://en.wikipedia.org/wiki/Suffix_array</a>&#160;<a href="#fnref:5" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+</li>
+<li id="fn:6" role="doc-endnote">
+<p><a href="https://github.com/y-256/libdivsufsort">https://github.com/y-256/libdivsufsort</a>&#160;<a href="#fnref:6" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+</li>
+<li id="fn:7" role="doc-endnote">
+<p><a href="https://security-tracker.debian.org/tracker/CVE-2014-9862">https://security-tracker.debian.org/tracker/CVE-2014-9862</a>&#160;<a href="#fnref:7" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+</li>
+</ol>
+</section>
+
+		</section>
+
+		<div class="post-tags">
+			
+			
+			
+		</div>
+	</article>
+</main>
+<footer>
+<hr><a class="soc" href="https://github.com/zhuyie" title="GitHub"><i data-feather="github"></i></a>|⚡️
+	2022  © zhuyie |  <a href="https://github.com/athul/archie">Archie Theme</a> | Built with <a href="https://gohugo.io">Hugo</a>
+</footer>
+
+
+<script type="application/javascript">
+var doNotTrack = false;
+if (!doNotTrack) {
+	window.ga=window.ga||function(){(ga.q=ga.q||[]).push(arguments)};ga.l=+new Date;
+	ga('create', 'UA-195056302-1', 'auto');
+	
+	ga('send', 'pageview');
+}
+</script>
+<script async src='https://www.google-analytics.com/analytics.js'></script>
+
+<script>
+      feather.replace()
+</script></div>
+    </body>
+</html>
