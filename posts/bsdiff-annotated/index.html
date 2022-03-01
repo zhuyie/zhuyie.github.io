@@ -90,8 +90,8 @@
 <li>从extra block读取y个字节（y可能为0），直接写入到newfile；</li>
 <li>调整oldfile的当前位置，增加z个字节；注意z可能为<strong>负数</strong>；</li>
 </ol>
-<p>上述的8字节整数，均采用了64位big-endian<sup id="fnref:3"><a href="#fn:3" class="footnote-ref" role="doc-noteref">3</a></sup>编码，bspatch.c中的<code>offtin</code>函数和bsdiff.c中的<code>offtout</code>函数用于处理它与host中<code>off_t</code>类型的互转。</p>
-<p>此外，control block, diff block和extra block都使用bzip<sup id="fnref:4"><a href="#fn:4" class="footnote-ref" role="doc-noteref">4</a></sup>算法进行了压缩。这些压缩是patch文件实际尺寸会减小的原因，而算法本身只是负责构建出这些具有高压缩性的数据。</p>
+<p>上述的8字节整数，采用的是原码表示（sign–magnitude<sup id="fnref:3"><a href="#fn:3" class="footnote-ref" role="doc-noteref">3</a></sup>）以及大端模式（big-endian<sup id="fnref:4"><a href="#fn:4" class="footnote-ref" role="doc-noteref">4</a></sup>）存储，bspatch.c中的<code>offtin</code>函数和bsdiff.c中的<code>offtout</code>函数用于处理它与host中<code>off_t</code>类型的互转。</p>
+<p>此外，control block, diff block和extra block都使用bzip<sup id="fnref:5"><a href="#fn:5" class="footnote-ref" role="doc-noteref">5</a></sup>算法进行了压缩。这些压缩是patch文件实际尺寸会减小的原因，而算法本身只是负责构建出这些具有高压缩性的数据。</p>
 <h3 id="bspatch">bspatch</h3>
 <p>搞懂了patchfile的格式以后，bspatch的逻辑就很容易理解了：</p>
 <ul>
@@ -124,7 +124,7 @@
 		(lseek(fd,<span style="color:#ae81ff">0</span>,SEEK_SET)<span style="color:#f92672">!=</span><span style="color:#ae81ff">0</span>) <span style="color:#f92672">||</span>
 		(read(fd,old,oldsize)<span style="color:#f92672">!=</span>oldsize) <span style="color:#f92672">||</span>
 		(close(fd)<span style="color:#f92672">==-</span><span style="color:#ae81ff">1</span>)) err(<span style="color:#ae81ff">1</span>,<span style="color:#e6db74">&#34;%s&#34;</span>,argv[<span style="color:#ae81ff">1</span>]);
-</code></pre></div><p>◈ 基于oldfile的内容构建一个<strong>后缀数组</strong>（suffix array<sup id="fnref:5"><a href="#fn:5" class="footnote-ref" role="doc-noteref">5</a></sup>），用于后面在oldfile中快速搜索与newfile中内容匹配的区域。bsdiff使用qsufsort来进行后缀排序，这个算法需要用到两个额外数组I和V，其中I用于保存结果后缀数组，V为辅助空间，执行完就可以释放。</p>
+</code></pre></div><p>◈ 基于oldfile的内容构建一个<strong>后缀数组</strong>（suffix array<sup id="fnref:6"><a href="#fn:6" class="footnote-ref" role="doc-noteref">6</a></sup>），用于后面在oldfile中快速搜索与newfile中内容匹配的区域。bsdiff使用qsufsort来进行后缀排序，这个算法需要用到两个额外数组I和V，其中I用于保存结果后缀数组，V为辅助空间，执行完就可以释放。</p>
 <p>可以不去理解qsufsort函数（及其辅助函数split）的内部实现。首先把它当成<strong>黑盒</strong>不影响对bsdiff流程的理解，只要你知道suffix array是什么东西；其次qsufsort在今天看起来并不是一个很好的后缀排序实现，可以考虑将它替换成其它更优的库。</p>
 <p>需要关注的点是这块的内存占用。off_t在32位环境下一般typedef为int，占用4字节。设oldfile的size为n，则I和V这两个数组会占用8n的内存空间，再加上之前已经加载到内存的一份oldfile，我们的<strong>峰值内存需求</strong>已经达到了9n！如果要考虑64位就更加恐怖了。</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c" data-lang="c">	<span style="color:#66d9ef">if</span>(((I<span style="color:#f92672">=</span>malloc((oldsize<span style="color:#f92672">+</span><span style="color:#ae81ff">1</span>)<span style="color:#f92672">*</span><span style="color:#66d9ef">sizeof</span>(off_t)))<span style="color:#f92672">==</span>NULL) <span style="color:#f92672">||</span>
@@ -279,8 +279,8 @@
 <li>patch流程的内存需求为<code>n+m+O(1)</code>。因为patch流程通常在客户端运行，内存资源受限的可能性比较大。</li>
 <li>diff流程的内存需求在32位时为<code>max(9n,5n+3m)+O(1)</code>，前面的9n对应后缀数组构建的阶段，后面的5n+3m对应扫描阶段。以250MB左右的文件为例，9n为2250MB，这已经超过了很多32位操作系统中用户态程序的可用地址空间（例如Windows通常为2GB）。</li>
 </ol>
-<p>其次是运行性能。qsufsort的性能比较一般，可以考虑用更好的后缀排序库来代替（例如libdivsufsort<sup id="fnref:6"><a href="#fn:6" class="footnote-ref" role="doc-noteref">6</a></sup>）。bzip2以今天的眼光看在压缩率、性能上也算不上优秀，可以考虑更换压缩算法和压缩库。整体代码对性能优化考虑较少，存在很多不必要的seek动作和小数据量的IO动作。</p>
-<p>最后还存在一些安全性漏洞，例如CVE-2014-9862<sup id="fnref:7"><a href="#fn:7" class="footnote-ref" role="doc-noteref">7</a></sup>。</p>
+<p>其次是运行性能。qsufsort的性能比较一般，可以考虑用更好的后缀排序库来代替（例如libdivsufsort<sup id="fnref:7"><a href="#fn:7" class="footnote-ref" role="doc-noteref">7</a></sup>）。bzip2以今天的眼光看在压缩率、性能上也算不上优秀，可以考虑更换压缩算法和压缩库。整体代码对性能优化考虑较少，存在很多不必要的seek动作和小数据量的IO动作。</p>
+<p>最后还存在一些安全性漏洞，例如CVE-2014-9862<sup id="fnref:8"><a href="#fn:8" class="footnote-ref" role="doc-noteref">8</a></sup>。</p>
 <h2 id="references">References</h2>
 <section class="footnotes" role="doc-endnotes">
 <hr>
@@ -292,19 +292,22 @@
 <p><a href="https://source.android.com/devices/tech/ota/reduce_size">https://source.android.com/devices/tech/ota/reduce_size</a>&#160;<a href="#fnref:2" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
 <li id="fn:3" role="doc-endnote">
-<p><a href="https://betterexplained.com/articles/understanding-big-and-little-endian-byte-order/">https://betterexplained.com/articles/understanding-big-and-little-endian-byte-order/</a>&#160;<a href="#fnref:3" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+<p><a href="https://en.wikipedia.org/wiki/Signed_number_representations#Sign-and-magnitude_method">https://en.wikipedia.org/wiki/Signed_number_representations#Sign-and-magnitude_method</a>&#160;<a href="#fnref:3" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
 <li id="fn:4" role="doc-endnote">
-<p><a href="https://www.sourceware.org/bzip2/">https://www.sourceware.org/bzip2/</a>&#160;<a href="#fnref:4" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+<p><a href="https://betterexplained.com/articles/understanding-big-and-little-endian-byte-order/">https://betterexplained.com/articles/understanding-big-and-little-endian-byte-order/</a>&#160;<a href="#fnref:4" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
 <li id="fn:5" role="doc-endnote">
-<p><a href="https://en.wikipedia.org/wiki/Suffix_array">https://en.wikipedia.org/wiki/Suffix_array</a>&#160;<a href="#fnref:5" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+<p><a href="https://www.sourceware.org/bzip2/">https://www.sourceware.org/bzip2/</a>&#160;<a href="#fnref:5" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
 <li id="fn:6" role="doc-endnote">
-<p><a href="https://github.com/y-256/libdivsufsort">https://github.com/y-256/libdivsufsort</a>&#160;<a href="#fnref:6" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+<p><a href="https://en.wikipedia.org/wiki/Suffix_array">https://en.wikipedia.org/wiki/Suffix_array</a>&#160;<a href="#fnref:6" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
 <li id="fn:7" role="doc-endnote">
-<p><a href="https://security-tracker.debian.org/tracker/CVE-2014-9862">https://security-tracker.debian.org/tracker/CVE-2014-9862</a>&#160;<a href="#fnref:7" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+<p><a href="https://github.com/y-256/libdivsufsort">https://github.com/y-256/libdivsufsort</a>&#160;<a href="#fnref:7" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+</li>
+<li id="fn:8" role="doc-endnote">
+<p><a href="https://security-tracker.debian.org/tracker/CVE-2014-9862">https://security-tracker.debian.org/tracker/CVE-2014-9862</a>&#160;<a href="#fnref:8" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
 </ol>
 </section>
