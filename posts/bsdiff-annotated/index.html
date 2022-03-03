@@ -272,10 +272,10 @@
 			};
 </code></pre></div><p>简单总结：</p>
 <ol>
-<li>整体流程基于new从前向后一段一段的处理。每次找到一个合适的点scan，然后将lastscan到scan这个区段视为一处“近似匹配区域”来进行处理。</li>
+<li>整体流程基于new从头开始一段一段的处理。每次找到一个合适的点scan，然后将lastscan到scan这个区段视为一处“近似匹配区域”来进行处理。</li>
 <li>new[scan, scan+len)在old中存在一个“完全匹配”（100%的字节相同），只是这个old中的匹配位置pos，在各次匹配中可能会前后乱跳。换句话说，old中的某些区段可能与多个new中的区段相匹配，被多次使用。</li>
-<li>lastscan对应的是处理前一处“近似匹配区域”时的scan-lenb，因此new[lastscan, scan)的开头部分是前一次的backward-extension加上一段“完全匹配”。</li>
-<li>scan从前一次的scan+len开始向后尝试，直至找到一个在old中存在“完全匹配”，但按前一次“近似匹配”的对应位置对比至少有8个字节不同的block。从这个点会向后找出一个长度lenb，new[lastscan, scan-lenb)会被处理并写入patch文件，scan-lenb会被作为下一次的lastscan。pos-lenb则会变为下一次的lastpos，注意在做lenb探查时对比的并不是此pos往回的那一段区域。</li>
+<li>lastscan对应的是处理前一处“近似匹配区域”时的scan-lenb，因此new[lastscan, scan)的开头部分是前一次的backward-extension加上前一次的“完全匹配”。</li>
+<li>scan从前一次的scan+len开始向前（文件尾处）尝试，直至找到一个在old中存在“完全匹配”，但按前一次“近似匹配”的对应位置对比至少有8个字节不同的block。从这个点会向后（文件开始处）找出一个长度lenb，new[lastscan, scan-lenb)会被处理并写入patch文件，scan-lenb会被作为下一次的lastscan。pos-lenb则会变为下一次的lastpos，注意在做lenb探查时对比的并不是此pos往回的那一段区域。</li>
 </ol>
 <p>◈ 最后的收尾部分注释较多，逻辑也比较直白：</p>
 <ul>
