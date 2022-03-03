@@ -250,7 +250,7 @@
 </span><span style="color:#75715e"></span>			<span style="color:#66d9ef">if</span>(((len<span style="color:#f92672">==</span>oldscore) <span style="color:#f92672">&amp;&amp;</span> (len<span style="color:#f92672">!=</span><span style="color:#ae81ff">0</span>)) <span style="color:#f92672">||</span> 
 				(len<span style="color:#f92672">&gt;</span>oldscore<span style="color:#f92672">+</span><span style="color:#ae81ff">8</span>)) <span style="color:#66d9ef">break</span>;
 
-			<span style="color:#75715e">// 走到这里说明当前len中不相等的字节数没有大于8，需要继续循环。
+			<span style="color:#75715e">// 走到这里说明当前不相等的字节数没有大于8，需要继续循环。
 </span><span style="color:#75715e"></span>			<span style="color:#75715e">// 由于下次循环是从scan+1的位置上尝试，因此若scan对应的字节是相等的，
 </span><span style="color:#75715e"></span>			<span style="color:#75715e">// 它已经被计算在oldscore之内的值需要被减掉。
 </span><span style="color:#75715e"></span>			<span style="color:#66d9ef">if</span>((scan<span style="color:#f92672">+</span>lastoffset<span style="color:#f92672">&lt;</span>oldsize) <span style="color:#f92672">&amp;&amp;</span>
@@ -270,7 +270,14 @@
 </span><span style="color:#75715e"></span>				<span style="color:#75715e">// lenf所对应的相同比率更高。
 </span><span style="color:#75715e"></span>				<span style="color:#66d9ef">if</span>(s<span style="color:#f92672">*</span><span style="color:#ae81ff">2</span><span style="color:#f92672">-</span>i<span style="color:#f92672">&gt;</span>Sf<span style="color:#f92672">*</span><span style="color:#ae81ff">2</span><span style="color:#f92672">-</span>lenf) { Sf<span style="color:#f92672">=</span>s; lenf<span style="color:#f92672">=</span>i; };
 			};
-</code></pre></div><p>◈ 最后的收尾部分注释较多，逻辑也比较直白：</p>
+</code></pre></div><p>简单总结：</p>
+<ol>
+<li>整体流程基于new从前向后一段一段的处理。每次找到一个合适的点scan，然后将lastscan到scan这个区段视为一处“近似匹配区域”来进行处理。</li>
+<li>new[scan, scan+len)在old中存在一个“完全匹配”（100%的字节相同），只是这个old中的匹配位置pos，在各次匹配中可能会前后乱跳。换句话说，old中的某些区段可能与多个new中的区段相匹配，被多次使用。</li>
+<li>lastscan对应的是处理前一处“近似匹配区域”时的scan-lenb，因此new[lastscan, scan)的开头部分是前一次的backward-extension加上一段“完全匹配”。</li>
+<li>scan从前一次的scan+len开始向后尝试，直至找到一个在old中存在“完全匹配”，但按前一次“近似匹配”的对应位置对比至少有8个字节不同的block。从这个点会向后找出一个长度lenb，new[lastscan, scan-lenb)会被处理并写入patch文件，scan-lenb会被作为下一次的lastscan。pos-lenb则会变为下一次的lastpos，注意在做lenb探查时对比的并不是此pos往回的那一段区域。</li>
+</ol>
+<p>◈ 最后的收尾部分注释较多，逻辑也比较直白：</p>
 <ul>
 <li>写完control block压缩流；</li>
 <li>将db的内容写入一个新的bzip压缩流，也就是diff block子文件；</li>
