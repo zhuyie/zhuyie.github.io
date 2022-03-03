@@ -115,7 +115,7 @@
 <p>接下来我们实际看下bsdiff.c的流程。</p>
 <p>◈ 首先是判断输入参数是否合法。程序需要3个参数，argv[1], argv[2]和argv[3]分别对应oldfile, newfile和patchfile的文件路径。</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c" data-lang="c">	<span style="color:#66d9ef">if</span>(argc<span style="color:#f92672">!=</span><span style="color:#ae81ff">4</span>) errx(<span style="color:#ae81ff">1</span>,<span style="color:#e6db74">&#34;usage: %s oldfile newfile patchfile</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#34;</span>,argv[<span style="color:#ae81ff">0</span>]);
-</code></pre></div><p>◈ 打开oldfile，分配对应大小的buffer，将文件内容读取到内存buffer中。之所以要malloc(oldsize+1)是因为oldsize<strong>可能为0</strong>，与之相对的newsize也可能为0。</p>
+</code></pre></div><p>◈ 打开oldfile，分配对应大小的buffer，将文件内容读取到内存buffer中。之所以要<code>malloc(oldsize+1)</code>是因为oldsize<strong>可能为0</strong>，与之相对的newsize也可能为0。</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c" data-lang="c">	<span style="color:#75715e">/* Allocate oldsize+1 bytes instead of oldsize bytes to ensure
 </span><span style="color:#75715e">		that we never try to malloc(0) and get a NULL pointer */</span>
 	<span style="color:#66d9ef">if</span>(((fd<span style="color:#f92672">=</span>open(argv[<span style="color:#ae81ff">1</span>],O_RDONLY,<span style="color:#ae81ff">0</span>))<span style="color:#f92672">&lt;</span><span style="color:#ae81ff">0</span>) <span style="color:#f92672">||</span>
@@ -142,7 +142,7 @@
 		(lseek(fd,<span style="color:#ae81ff">0</span>,SEEK_SET)<span style="color:#f92672">!=</span><span style="color:#ae81ff">0</span>) <span style="color:#f92672">||</span>
 		(read(fd,new,newsize)<span style="color:#f92672">!=</span>newsize) <span style="color:#f92672">||</span>
 		(close(fd)<span style="color:#f92672">==-</span><span style="color:#ae81ff">1</span>)) err(<span style="color:#ae81ff">1</span>,<span style="color:#e6db74">&#34;%s&#34;</span>,argv[<span style="color:#ae81ff">2</span>]);
-</code></pre></div><p>◈ 为db和eb这两个buffer分配内存。这两个buffer对应的是子文件diff block和extra block，其内容会在后面的步骤中逐渐写入。dblen和eblen用于描述它们当前有效数据的长度。</p>
+</code></pre></div><p>◈ 为db和eb这两个buffer分配内存。这两个buffer对应的是子文件diff block和extra block，其最大长度不会超过newsize（因为它们对应到newfile的某些部分）。它们的内容会在后面的步骤中逐渐写入，dblen和eblen用于描述它们当前有效数据的长度。</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c" data-lang="c">	<span style="color:#66d9ef">if</span>(((db<span style="color:#f92672">=</span>malloc(newsize<span style="color:#f92672">+</span><span style="color:#ae81ff">1</span>))<span style="color:#f92672">==</span>NULL) <span style="color:#f92672">||</span>
 		((eb<span style="color:#f92672">=</span>malloc(newsize<span style="color:#f92672">+</span><span style="color:#ae81ff">1</span>))<span style="color:#f92672">==</span>NULL)) err(<span style="color:#ae81ff">1</span>,NULL);
 	dblen<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;
@@ -169,7 +169,7 @@
 </span><span style="color:#75715e"></span>	<span style="color:#66d9ef">while</span>(scan<span style="color:#f92672">&lt;</span>newsize) {
 		oldscore<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;
 
-		<span style="color:#75715e">// 从scan开始向后搜索，符合某种条件时跳出循环
+		<span style="color:#75715e">// 从scan开始向后搜索，符合某种条件时跳出循环；
 </span><span style="color:#75715e"></span>		<span style="color:#66d9ef">for</span>(scsc<span style="color:#f92672">=</span>scan<span style="color:#f92672">+=</span>len;scan<span style="color:#f92672">&lt;</span>newsize;scan<span style="color:#f92672">++</span>) {
 			...
 		};
@@ -183,7 +183,7 @@
 				...
 			};
 
-			<span style="color:#75715e">// 确定lenb的长度。区域[scan-lenb, scan-1]被称为backward extension
+			<span style="color:#75715e">// 确定lenb的长度。区域[scan-lenb, scan)被称为backward extension
 </span><span style="color:#75715e"></span>			lenb<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;
 			<span style="color:#66d9ef">if</span>(scan<span style="color:#f92672">&lt;</span>newsize) {
 				s<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;Sb<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;
@@ -226,9 +226,11 @@
 		};
 	};
 </code></pre></div><p>细看下确定scan, len和oldscore的逻辑：</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c" data-lang="c">		oldscore<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c" data-lang="c">		<span style="color:#75715e">// 重置oldscore
+</span><span style="color:#75715e"></span>		oldscore<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;
 
-		<span style="color:#66d9ef">for</span>(scsc<span style="color:#f92672">=</span>scan<span style="color:#f92672">+=</span>len;scan<span style="color:#f92672">&lt;</span>newsize;scan<span style="color:#f92672">++</span>) {
+		<span style="color:#75715e">// 注意scan值变动的方式：进入循环时(+=len)，之后每执行完一次时(++)；
+</span><span style="color:#75715e"></span>		<span style="color:#66d9ef">for</span>(scsc<span style="color:#f92672">=</span>scan<span style="color:#f92672">+=</span>len;scan<span style="color:#f92672">&lt;</span>newsize;scan<span style="color:#f92672">++</span>) {
 			<span style="color:#75715e">// 这里对new中scan处开始的内容，在old中搜索一个完全匹配区域。
 </span><span style="color:#75715e"></span>			<span style="color:#75715e">// len返回完全匹配区域的长度，pos为old中与scan所对应的位置。
 </span><span style="color:#75715e"></span>			<span style="color:#75715e">// search函数是一个标准的二分查找算法，I是前面构建出来的后缀数组。
@@ -248,7 +250,9 @@
 </span><span style="color:#75715e"></span>			<span style="color:#66d9ef">if</span>(((len<span style="color:#f92672">==</span>oldscore) <span style="color:#f92672">&amp;&amp;</span> (len<span style="color:#f92672">!=</span><span style="color:#ae81ff">0</span>)) <span style="color:#f92672">||</span> 
 				(len<span style="color:#f92672">&gt;</span>oldscore<span style="color:#f92672">+</span><span style="color:#ae81ff">8</span>)) <span style="color:#66d9ef">break</span>;
 
-			<span style="color:#75715e">// 还没理解^_^
+			<span style="color:#75715e">// 走到这里说明当前len中不相等的字节数没有大于8，需要继续循环。
+</span><span style="color:#75715e"></span>			<span style="color:#75715e">// 由于下次循环是从scan+1的位置上尝试，因此若scan对应的字节是相等的，
+</span><span style="color:#75715e"></span>			<span style="color:#75715e">// 它已经被计算在oldscore之内的值需要被减掉。
 </span><span style="color:#75715e"></span>			<span style="color:#66d9ef">if</span>((scan<span style="color:#f92672">+</span>lastoffset<span style="color:#f92672">&lt;</span>oldsize) <span style="color:#f92672">&amp;&amp;</span>
 				(old[scan<span style="color:#f92672">+</span>lastoffset] <span style="color:#f92672">==</span> new[scan]))
 				oldscore<span style="color:#f92672">--</span>;
