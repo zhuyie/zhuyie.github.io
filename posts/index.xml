@@ -57,7 +57,7 @@ Test program #include &amp;lt;cstdio&amp;gt;#include &amp;lt;cstdlib&amp;gt;#inc
     </item>
     
     <item>
-      <title>CPU Cache False Sharing</title>
+      <title>CPU缓存伪共享(False Sharing)问题</title>
       <link>https://zhuyie.github.io/posts/cpu-cache-false-sharing/</link>
       <pubDate>Mon, 03 May 2021 13:06:16 +0800</pubDate>
       
