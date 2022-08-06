@@ -57,7 +57,7 @@
 <li>在可执行文件的与源码修改无直接对应关系的区域，所产生的差异是相当稀疏的（sparse）：(a)地址位移仅影响到部分的编译后指令；(b)地址位移的幅度一般较小，很多时候只影响到地址字的最后1～2个字节；</li>
 <li>数据和代码倾向于按整块的方式移动，通常存在很多“块”，其中的地址位移都按相同的差值发生了变化；</li>
 </ul>
-<p>由此可以想到，如果找出某个可执行程序的两个版本中那些对应源码没有改动的区域，对这些区域按字节计算差值（bytewise differences），其结果应该会存在很多0（因为内容相同），即使不为0也经常会出现高频重复值。换句话说，这些差值结果具有<strong>很高的可压缩性</strong>（highly compressible）。</p>
+<p>由此可以想到，如果找出某个可执行程序的两个版本中那些对应源码没有改动的区域，对这些区域按字节计算<strong>差值</strong>（bytewise differences），其结果应该会存在很多0（因为内容相同），即使不为0也经常会出现高频重复值。换句话说，这些差值结果具有<strong>很高的可压缩性</strong>（highly compressible）。</p>
 <h2 id="源码解析">源码解析</h2>
 <h3 id="patchfile-format">patchfile format</h3>
 <p>这部分在bspatch.c中有较详细的注释：</p>
@@ -86,7 +86,7 @@
 </ul>
 <p>其中的control block是一个数组，其每个元素为3个8字节整数所组成的三元组（x, y, z）。对这个三元组各部分的注释，直接的描述了<strong>bspatch主循环</strong>中每次所执行的逻辑：</p>
 <ol>
-<li>从diff block和oldfile的当前位置分别读取x个字节，按字节分别相加，结果写入到newfile；</li>
+<li>从diff block和oldfile的当前位置分别读取x个字节，按字节分别<strong>相加</strong>，结果写入到newfile；</li>
 <li>从extra block读取y个字节（y可能为0），直接写入到newfile；</li>
 <li>调整oldfile的当前位置，增加z个字节；注意z可能为<strong>负数</strong>；</li>
 </ol>
@@ -164,7 +164,11 @@
 		errx(<span style="color:#ae81ff">1</span>, <span style="color:#e6db74">&#34;BZ2_bzWriteOpen, bz2err = %d&#34;</span>, bz2err);
 </code></pre></div><p>◈ 接下来是主循环了，这部分逻辑较为复杂，我们先将它进行简化，整理出结构。</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c" data-lang="c">	scan<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;len<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;
-	lastscan<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;lastpos<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;lastoffset<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;
+	<span style="color:#75715e">// lastscan是当前“候选”匹配区域在new中的开始位置；
+</span><span style="color:#75715e"></span>	<span style="color:#75715e">// lastpos 是当前“候选”匹配区域在old中的开始位置；
+</span><span style="color:#75715e"></span>	<span style="color:#75715e">// lastoffset是当前“候选”匹配区域中old中位置相对于new中对应位置的差值，
+</span><span style="color:#75715e"></span>	<span style="color:#75715e">//   因此&lt;new_pos&gt;+lastoffset=&lt;old_pos&gt;；
+</span><span style="color:#75715e"></span>	lastscan<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;lastpos<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;lastoffset<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;
 	<span style="color:#75715e">// 循环处理整个newfile
 </span><span style="color:#75715e"></span>	<span style="color:#66d9ef">while</span>(scan<span style="color:#f92672">&lt;</span>newsize) {
 		oldscore<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;
@@ -174,7 +178,8 @@
 			...
 		};
 
-		<span style="color:#75715e">// len!=oldscore说明找到了一个符合条件的近似匹配区域；scan==newsize说明已经已到达文件尾；
+		<span style="color:#75715e">// len!=oldscore说明当前“候选”匹配区域不需要再继续向后搜索了；
+</span><span style="color:#75715e"></span>		<span style="color:#75715e">// scan==newsize说明已经已到达文件尾；
 </span><span style="color:#75715e"></span>		<span style="color:#75715e">// 符合这两个条件之一时，我们开始处理当前这个近似匹配区域；
 </span><span style="color:#75715e"></span>		<span style="color:#66d9ef">if</span>((len<span style="color:#f92672">!=</span>oldscore) <span style="color:#f92672">||</span> (scan<span style="color:#f92672">==</span>newsize)) {
 			<span style="color:#75715e">// 确定lenf的长度。区域[lastscan, lastscan+lenf)被称为forward extension
@@ -218,7 +223,7 @@
 </span><span style="color:#75715e"></span>			offtout((pos<span style="color:#f92672">-</span>lenb)<span style="color:#f92672">-</span>(lastpos<span style="color:#f92672">+</span>lenf),buf);
 			...
 
-			<span style="color:#75715e">// backward extension会被作为下一轮近似匹配区域的开始部分，
+			<span style="color:#75715e">// backward extension会被作为下一轮“候选”匹配区域的开始部分，
 </span><span style="color:#75715e"></span>			<span style="color:#75715e">// 也就是变成下一次的forward extension的一部分
 </span><span style="color:#75715e"></span>			lastscan<span style="color:#f92672">=</span>scan<span style="color:#f92672">-</span>lenb;
 			lastpos<span style="color:#f92672">=</span>pos<span style="color:#f92672">-</span>lenb;
@@ -226,7 +231,9 @@
 		};
 	};
 </code></pre></div><p>细看下确定scan, len和oldscore的逻辑：</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c" data-lang="c">		<span style="color:#75715e">// 重置oldscore
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c" data-lang="c">		<span style="color:#75715e">// 当前“候选”匹配区域为：new[lastscan, scan) &lt;-&gt; old[lastpos, scan+lastoffset)
+</span><span style="color:#75715e"></span>
+		<span style="color:#75715e">// 重置oldscore
 </span><span style="color:#75715e"></span>		oldscore<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;
 
 		<span style="color:#75715e">// 注意scan值变动的方式：进入循环时(+=len)，之后每执行完一次时(++)；
@@ -237,16 +244,20 @@
 </span><span style="color:#75715e"></span>			len<span style="color:#f92672">=</span>search(I,old,oldsize,new<span style="color:#f92672">+</span>scan,newsize<span style="color:#f92672">-</span>scan,
 					<span style="color:#ae81ff">0</span>,oldsize,<span style="color:#f92672">&amp;</span>pos);
 
-			<span style="color:#75715e">// lastoffset是前一次“近似匹配”时的pos-scan。
-</span><span style="color:#75715e"></span>			<span style="color:#75715e">// 这里统计new中[scan, scan+len)与old中前一次近似匹配区域的对应延伸区段中相等的字节数，
+			<span style="color:#75715e">// 上一步的搜索，得到了“候选”匹配区域new的向后延伸，在old中完全匹配区域的开始位置和长度，
+</span><span style="color:#75715e"></span>			<span style="color:#75715e">//   但这个开始位置和“候选”匹配区域中old的结束位置有可能并不相连。
+</span><span style="color:#75715e"></span>
+			<span style="color:#75715e">// 统计new中[scan, scan+len)与old中“候选”匹配区域的对应延伸区段中相等的字节数，
 </span><span style="color:#75715e"></span>			<span style="color:#75715e">// 累加到oldscore中。注意循环变量是scsc，因此不会重复累加。
 </span><span style="color:#75715e"></span>			<span style="color:#66d9ef">for</span>(;scsc<span style="color:#f92672">&lt;</span>scan<span style="color:#f92672">+</span>len;scsc<span style="color:#f92672">++</span>)
 			<span style="color:#66d9ef">if</span>((scsc<span style="color:#f92672">+</span>lastoffset<span style="color:#f92672">&lt;</span>oldsize) <span style="color:#f92672">&amp;&amp;</span>
 				(old[scsc<span style="color:#f92672">+</span>lastoffset] <span style="color:#f92672">==</span> new[scsc]))
 				oldscore<span style="color:#f92672">++</span>;
 
-			<span style="color:#75715e">// 这里对应论文中的“we only record regions which contain at least 8 bytes 
-</span><span style="color:#75715e"></span>			<span style="color:#75715e">// not matching the forward-extension of the previous match”
+			<span style="color:#75715e">// (len==oldscore) &amp;&amp; (len!=0) 说明当前“候选”区域的延伸区域仍然匹配的很好，
+</span><span style="color:#75715e"></span>			<span style="color:#75715e">//   那么可以扩展“候选”匹配区域，并继续向后搜索；
+</span><span style="color:#75715e"></span>			<span style="color:#75715e">// (len&gt;oldscore+8) 说明延伸区域中至少有8个以上的字节是不匹配的，
+</span><span style="color:#75715e"></span>			<span style="color:#75715e">//   那么当前“候选”区域应该到此截止而不扩展；
 </span><span style="color:#75715e"></span>			<span style="color:#66d9ef">if</span>(((len<span style="color:#f92672">==</span>oldscore) <span style="color:#f92672">&amp;&amp;</span> (len<span style="color:#f92672">!=</span><span style="color:#ae81ff">0</span>)) <span style="color:#f92672">||</span> 
 				(len<span style="color:#f92672">&gt;</span>oldscore<span style="color:#f92672">+</span><span style="color:#ae81ff">8</span>)) <span style="color:#66d9ef">break</span>;
 
@@ -272,10 +283,9 @@
 			};
 </code></pre></div><p>简单总结：</p>
 <ol>
-<li>整体流程基于new从头开始一段一段的处理。每次找到一个合适的点scan，然后将lastscan到scan这个区段视为一处“近似匹配区域”来进行处理。</li>
-<li>new[scan, scan+len)在old中存在一个“完全匹配”（100%的字节相同），只是这个old中的匹配位置pos，在各次匹配中可能会前后乱跳。换句话说，old中的某些区段可能与多个new中的区段相匹配，被多次使用。</li>
-<li>lastscan对应的是处理前一处“近似匹配区域”时的scan-lenb，因此new[lastscan, scan)的开头部分是前一次的backward-extension加上前一次的“完全匹配”。</li>
-<li>scan从前一次的scan+len开始向前（文件尾处）尝试，直至找到一个在old中存在“完全匹配”，但按前一次“近似匹配”的对应位置对比至少有8个字节不同的block。从这个点会向后（文件开始处）找出一个长度lenb，new[lastscan, scan-lenb)会被处理并写入patch文件，scan-lenb会被作为下一次的lastscan。pos-lenb则会变为下一次的lastpos，注意在做lenb探查时对比的并不是此pos往回的那一段区域。</li>
+<li>从一个空的“候选”匹配区域开始，基于new持续向后探查。当(a)探查到文件尾，或者(b)当前探查位置在old中存在一个长度为len的完全匹配，并且当前“候选”匹配区域向后扩展len字节的区域中存在大于8个字节的不匹配时，结束当前“候选”的探查并进行这一“近似匹配区段”的数据输出。否则就扩展当前“候选”区域并继续探查。</li>
+<li>输出某一处“近似匹配区域”时，从区域的开始处向后找一个长度lenf，以及从区域的结束位置向前找一个长度lenb。lenf和lenb的判断标准都是看对应字节相同的比率是否达到50%。当lenf区段和lenb区段重叠时，在重叠区域中搜寻一个位置，使得此“近似匹配区域”的字节相同个数最大化，以此作为lenf区域和lenb区域的边界。</li>
+<li>lenf对应的内容会按diff block子文件来处理（计算差值后写入）；lenf和lenb若不相连，其中间的区域会按extra block子文件来处理（直接写入）；lenb对应的内容则会作为下一次“候选”匹配区域的开始部分。</li>
 </ol>
 <p>◈ 最后的收尾部分注释较多，逻辑也比较直白：</p>
 <ul>
