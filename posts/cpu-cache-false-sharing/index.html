@@ -47,84 +47,84 @@
 		<section class="body">
 			<h2 id="起因">起因</h2>
 <p>一个通过<a href="https://blogs.sas.com/content/iml/2016/03/14/monte-carlo-estimates-of-pi.html">蒙特卡洛方法估算 π 值</a>的测试程序，采用了多线程的方式，其代码大致如下：</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++"><span style="color:#75715e">#include</span> <span style="color:#75715e">&#34;...&#34;</span><span style="color:#75715e">
-</span><span style="color:#75715e"></span>
-<span style="color:#66d9ef">class</span> <span style="color:#a6e22e">RandomNumber</span>
-{
-    mt19937 mt19937_;  <span style="color:#75715e">// random number generator
-</span><span style="color:#75715e"></span>    <span style="color:#66d9ef">const</span> <span style="color:#66d9ef">float</span> MT19937_FLOAT_MULTI <span style="color:#f92672">=</span> <span style="color:#ae81ff">2.3283064365386962890625e-10</span>f; <span style="color:#75715e">// (2^32-1)^-1
-</span><span style="color:#75715e"></span><span style="color:#66d9ef">public</span><span style="color:#f92672">:</span>
-    <span style="color:#66d9ef">void</span> seed(<span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">int</span> seed)
-    {
-        mt19937_.seed(seed);
-    }
-    <span style="color:#66d9ef">float</span> <span style="color:#a6e22e">operator</span>() ()
-    {
-        <span style="color:#66d9ef">return</span> mt19937_() <span style="color:#f92672">*</span> MT19937_FLOAT_MULTI;
-    }
-};
-
-<span style="color:#66d9ef">void</span> <span style="color:#a6e22e">worker</span>(<span style="color:#66d9ef">int</span> worker_id, <span style="color:#66d9ef">int64_t</span> samples, RandomNumber <span style="color:#f92672">*</span>rnd, <span style="color:#66d9ef">int64_t</span> <span style="color:#f92672">*</span>in)
-{
-    rnd<span style="color:#f92672">-&gt;</span>seed(worker_id);  <span style="color:#75715e">// seed the prng 
-</span><span style="color:#75715e"></span>    <span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">int64_t</span> i <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>; i <span style="color:#f92672">&lt;</span> samples; i<span style="color:#f92672">++</span>)
-    {
-        <span style="color:#66d9ef">float</span> x <span style="color:#f92672">=</span> (<span style="color:#f92672">*</span>rnd)();
-        <span style="color:#66d9ef">float</span> y <span style="color:#f92672">=</span> (<span style="color:#f92672">*</span>rnd)();
-        <span style="color:#66d9ef">if</span> (x<span style="color:#f92672">*</span>x <span style="color:#f92672">+</span> y<span style="color:#f92672">*</span>y <span style="color:#f92672">&lt;=</span> <span style="color:#ae81ff">1</span>)
-        {
-            (<span style="color:#f92672">*</span>in)<span style="color:#f92672">++</span>;
-        }
-    }
-}
-
-<span style="color:#66d9ef">int</span> <span style="color:#a6e22e">main</span>(<span style="color:#66d9ef">int</span> argc, <span style="color:#66d9ef">char</span><span style="color:#f92672">*</span> argv[])
-{
-    <span style="color:#66d9ef">int</span> num_threads <span style="color:#f92672">=</span> <span style="color:#ae81ff">16</span>;
-    <span style="color:#66d9ef">int64_t</span> num_samples <span style="color:#f92672">=</span> <span style="color:#ae81ff">1000000000</span>;
-    <span style="color:#75715e">// parsing command line arguments
-</span><span style="color:#75715e"></span>
-    <span style="color:#66d9ef">auto</span> start <span style="color:#f92672">=</span> system_clock<span style="color:#f92672">::</span>now();
-
-    RandomNumber<span style="color:#f92672">*</span> rnd <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> RandomNumber[num_threads];
-    <span style="color:#66d9ef">int64_t</span><span style="color:#f92672">*</span> in_points <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> <span style="color:#66d9ef">int64_t</span>[num_threads];
-
-    <span style="color:#66d9ef">int64_t</span> total_points <span style="color:#f92672">=</span> num_samples;
-    <span style="color:#66d9ef">int64_t</span> circle_points <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>;
-    vector<span style="color:#f92672">&lt;</span><span style="color:#66d9ef">thread</span><span style="color:#f92672">&gt;</span> threads;
-    <span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">int</span> i <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>; i <span style="color:#f92672">&lt;</span> num_threads; i<span style="color:#f92672">++</span>)
-    {
-        <span style="color:#66d9ef">int64_t</span> samples <span style="color:#f92672">=</span> num_samples <span style="color:#f92672">/</span> num_threads;
-        <span style="color:#66d9ef">if</span> (i <span style="color:#f92672">==</span> num_threads <span style="color:#f92672">-</span> <span style="color:#ae81ff">1</span>)
-        {
-            samples <span style="color:#f92672">+=</span> num_samples <span style="color:#f92672">-</span> samples <span style="color:#f92672">*</span> num_threads;
-        }
-        threads.emplace_back(worker, i, samples, <span style="color:#f92672">&amp;</span>(rnd[i]), <span style="color:#f92672">&amp;</span>(in_points[i]));
-    }
-    <span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">int</span> i <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>; i <span style="color:#f92672">&lt;</span> num_threads; i<span style="color:#f92672">++</span>)
-    {
-        threads[i].join();
-        circle_points <span style="color:#f92672">+=</span> in_points[i];
-    }
-
-    <span style="color:#66d9ef">double</span> pi <span style="color:#f92672">=</span> <span style="color:#ae81ff">4</span> <span style="color:#f92672">*</span> circle_points <span style="color:#f92672">/</span> (<span style="color:#66d9ef">double</span>)total_points;
-    <span style="color:#66d9ef">double</span> pi_true <span style="color:#f92672">=</span> acos(<span style="color:#f92672">-</span><span style="color:#ae81ff">1.0</span>);  <span style="color:#75715e">// true value of pi
-</span><span style="color:#75715e"></span>    <span style="color:#66d9ef">double</span> error <span style="color:#f92672">=</span> abs(pi <span style="color:#f92672">-</span> pi_true) <span style="color:#f92672">/</span> pi_true <span style="color:#f92672">*</span> <span style="color:#ae81ff">100</span>;
-    
-    <span style="color:#66d9ef">auto</span> duration <span style="color:#f92672">=</span> duration_cast<span style="color:#f92672">&lt;</span>microseconds<span style="color:#f92672">&gt;</span>(system_clock<span style="color:#f92672">::</span>now() <span style="color:#f92672">-</span> start);
-
-    fprintf(stdout, <span style="color:#e6db74">&#34;threads = %d</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#34;</span>, num_threads);
-    fprintf(stdout, <span style="color:#e6db74">&#34;samples = %lld</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#34;</span>, (<span style="color:#66d9ef">long</span> <span style="color:#66d9ef">long</span>)num_samples);
-    fprintf(stdout, <span style="color:#e6db74">&#34;duration = %.2fms</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#34;</span>, duration.count()<span style="color:#f92672">/</span><span style="color:#ae81ff">1000.0</span>);
-    fprintf(stdout, <span style="color:#e6db74">&#34;pi = %f (%f%% error)</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#34;</span>, pi, error);
-    fprintf(stdout, <span style="color:#e6db74">&#34;</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#34;</span>);
-
-    <span style="color:#66d9ef">delete</span> []rnd;
-    <span style="color:#66d9ef">delete</span> []in_points;
-
-    <span style="color:#66d9ef">return</span> <span style="color:#ae81ff">0</span>;
-}
-</code></pre></div><p>在我的MacBook Pro(16-inch, 2019)上测试，结果为：
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-c++" data-lang="c++"><span style="display:flex;"><span><span style="color:#75715e">#include</span> <span style="color:#75715e">&#34;...&#34;</span><span style="color:#75715e">
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">RandomNumber</span>
+</span></span><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>    mt19937 mt19937_;  <span style="color:#75715e">// random number generator
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    <span style="color:#66d9ef">const</span> <span style="color:#66d9ef">float</span> MT19937_FLOAT_MULTI <span style="color:#f92672">=</span> <span style="color:#ae81ff">2.3283064365386962890625e-10</span>f; <span style="color:#75715e">// (2^32-1)^-1
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">public</span><span style="color:#f92672">:</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">void</span> seed(<span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">int</span> seed)
+</span></span><span style="display:flex;"><span>    {
+</span></span><span style="display:flex;"><span>        mt19937_.seed(seed);
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">float</span> <span style="color:#a6e22e">operator</span>() ()
+</span></span><span style="display:flex;"><span>    {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> mt19937_() <span style="color:#f92672">*</span> MT19937_FLOAT_MULTI;
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>};
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">void</span> <span style="color:#a6e22e">worker</span>(<span style="color:#66d9ef">int</span> worker_id, <span style="color:#66d9ef">int64_t</span> samples, RandomNumber <span style="color:#f92672">*</span>rnd, <span style="color:#66d9ef">int64_t</span> <span style="color:#f92672">*</span>in)
+</span></span><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>    rnd<span style="color:#f92672">-&gt;</span>seed(worker_id);  <span style="color:#75715e">// seed the prng 
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    <span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">int64_t</span> i <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>; i <span style="color:#f92672">&lt;</span> samples; i<span style="color:#f92672">++</span>)
+</span></span><span style="display:flex;"><span>    {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">float</span> x <span style="color:#f92672">=</span> (<span style="color:#f92672">*</span>rnd)();
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">float</span> y <span style="color:#f92672">=</span> (<span style="color:#f92672">*</span>rnd)();
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> (x<span style="color:#f92672">*</span>x <span style="color:#f92672">+</span> y<span style="color:#f92672">*</span>y <span style="color:#f92672">&lt;=</span> <span style="color:#ae81ff">1</span>)
+</span></span><span style="display:flex;"><span>        {
+</span></span><span style="display:flex;"><span>            (<span style="color:#f92672">*</span>in)<span style="color:#f92672">++</span>;
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">int</span> <span style="color:#a6e22e">main</span>(<span style="color:#66d9ef">int</span> argc, <span style="color:#66d9ef">char</span><span style="color:#f92672">*</span> argv[])
+</span></span><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">int</span> num_threads <span style="color:#f92672">=</span> <span style="color:#ae81ff">16</span>;
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">int64_t</span> num_samples <span style="color:#f92672">=</span> <span style="color:#ae81ff">1000000000</span>;
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// parsing command line arguments
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">auto</span> start <span style="color:#f92672">=</span> system_clock<span style="color:#f92672">::</span>now();
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    RandomNumber<span style="color:#f92672">*</span> rnd <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> RandomNumber[num_threads];
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">int64_t</span><span style="color:#f92672">*</span> in_points <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> <span style="color:#66d9ef">int64_t</span>[num_threads];
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">int64_t</span> total_points <span style="color:#f92672">=</span> num_samples;
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">int64_t</span> circle_points <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>;
+</span></span><span style="display:flex;"><span>    vector<span style="color:#f92672">&lt;</span><span style="color:#66d9ef">thread</span><span style="color:#f92672">&gt;</span> threads;
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">int</span> i <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>; i <span style="color:#f92672">&lt;</span> num_threads; i<span style="color:#f92672">++</span>)
+</span></span><span style="display:flex;"><span>    {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">int64_t</span> samples <span style="color:#f92672">=</span> num_samples <span style="color:#f92672">/</span> num_threads;
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> (i <span style="color:#f92672">==</span> num_threads <span style="color:#f92672">-</span> <span style="color:#ae81ff">1</span>)
+</span></span><span style="display:flex;"><span>        {
+</span></span><span style="display:flex;"><span>            samples <span style="color:#f92672">+=</span> num_samples <span style="color:#f92672">-</span> samples <span style="color:#f92672">*</span> num_threads;
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>        threads.emplace_back(worker, i, samples, <span style="color:#f92672">&amp;</span>(rnd[i]), <span style="color:#f92672">&amp;</span>(in_points[i]));
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">int</span> i <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>; i <span style="color:#f92672">&lt;</span> num_threads; i<span style="color:#f92672">++</span>)
+</span></span><span style="display:flex;"><span>    {
+</span></span><span style="display:flex;"><span>        threads[i].join();
+</span></span><span style="display:flex;"><span>        circle_points <span style="color:#f92672">+=</span> in_points[i];
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">double</span> pi <span style="color:#f92672">=</span> <span style="color:#ae81ff">4</span> <span style="color:#f92672">*</span> circle_points <span style="color:#f92672">/</span> (<span style="color:#66d9ef">double</span>)total_points;
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">double</span> pi_true <span style="color:#f92672">=</span> acos(<span style="color:#f92672">-</span><span style="color:#ae81ff">1.0</span>);  <span style="color:#75715e">// true value of pi
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    <span style="color:#66d9ef">double</span> error <span style="color:#f92672">=</span> abs(pi <span style="color:#f92672">-</span> pi_true) <span style="color:#f92672">/</span> pi_true <span style="color:#f92672">*</span> <span style="color:#ae81ff">100</span>;
+</span></span><span style="display:flex;"><span>    
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">auto</span> duration <span style="color:#f92672">=</span> duration_cast<span style="color:#f92672">&lt;</span>microseconds<span style="color:#f92672">&gt;</span>(system_clock<span style="color:#f92672">::</span>now() <span style="color:#f92672">-</span> start);
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    fprintf(stdout, <span style="color:#e6db74">&#34;threads = %d</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#34;</span>, num_threads);
+</span></span><span style="display:flex;"><span>    fprintf(stdout, <span style="color:#e6db74">&#34;samples = %lld</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#34;</span>, (<span style="color:#66d9ef">long</span> <span style="color:#66d9ef">long</span>)num_samples);
+</span></span><span style="display:flex;"><span>    fprintf(stdout, <span style="color:#e6db74">&#34;duration = %.2fms</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#34;</span>, duration.count()<span style="color:#f92672">/</span><span style="color:#ae81ff">1000.0</span>);
+</span></span><span style="display:flex;"><span>    fprintf(stdout, <span style="color:#e6db74">&#34;pi = %f (%f%% error)</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#34;</span>, pi, error);
+</span></span><span style="display:flex;"><span>    fprintf(stdout, <span style="color:#e6db74">&#34;</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#34;</span>);
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">delete</span> []rnd;
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">delete</span> []in_points;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> <span style="color:#ae81ff">0</span>;
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>在我的MacBook Pro(16-inch, 2019)上测试，结果为：
 <img src="/images/cpu-cache-false-sharing-1.png" alt=""></p>
 <p>上工具看看这个结果怎么样。祭出Instruments，发现了一个奇怪的问题：
 <img src="/images/cpu-cache-false-sharing-2.png" alt=""></p>
@@ -237,32 +237,32 @@
 <p>看看效果吧（果然还是寄存器最快！）：
 <img src="/images/cpu-cache-false-sharing-10.png" alt=""></p>
 <h2 id="references">References</h2>
-<section class="footnotes" role="doc-endnotes">
+<div class="footnotes" role="doc-endnotes">
 <hr>
 <ol>
-<li id="fn:1" role="doc-endnote">
+<li id="fn:1">
 <p><a href="http://gec.di.uminho.pt/discip/minf/ac0102/1000gap_proc-mem_speed.pdf">http://gec.di.uminho.pt/discip/minf/ac0102/1000gap_proc-mem_speed.pdf</a>&#160;<a href="#fnref:1" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
-<li id="fn:2" role="doc-endnote">
+<li id="fn:2">
 <p><a href="https://en.wikipedia.org/wiki/Cache_(computing)#Operation">https://en.wikipedia.org/wiki/Cache_(computing)#Operation</a>&#160;<a href="#fnref:2" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
-<li id="fn:3" role="doc-endnote">
+<li id="fn:3">
 <p><a href="https://mechanical-sympathy.blogspot.com/2013/02/cpu-cache-flushing-fallacy.html">https://mechanical-sympathy.blogspot.com/2013/02/cpu-cache-flushing-fallacy.html</a>&#160;<a href="#fnref:3" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
-<li id="fn:4" role="doc-endnote">
+<li id="fn:4">
 <p><a href="https://superuser.com/questions/724504/processors-cache-l1-l2-and-l3-are-all-made-of-sram">https://superuser.com/questions/724504/processors-cache-l1-l2-and-l3-are-all-made-of-sram</a>&#160;<a href="#fnref:4" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
-<li id="fn:5" role="doc-endnote">
+<li id="fn:5">
 <p><a href="https://en.wikipedia.org/wiki/MESI_protocol">https://en.wikipedia.org/wiki/MESI_protocol</a>&#160;<a href="#fnref:5" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
-<li id="fn:6" role="doc-endnote">
+<li id="fn:6">
 <p><a href="https://software.intel.com/content/www/us/en/develop/articles/avoiding-and-identifying-false-sharing-among-threads.html">https://software.intel.com/content/www/us/en/develop/articles/avoiding-and-identifying-false-sharing-among-threads.html</a>&#160;<a href="#fnref:6" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
-<li id="fn:7" role="doc-endnote">
+<li id="fn:7">
 <p><a href="https://software.intel.com/content/www/us/en/develop/documentation/vtune-cookbook/top/tuning-recipes/false-sharing.html">https://software.intel.com/content/www/us/en/develop/documentation/vtune-cookbook/top/tuning-recipes/false-sharing.html</a>&#160;<a href="#fnref:7" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
 </ol>
-</section>
+</div>
 
 		</section>
 

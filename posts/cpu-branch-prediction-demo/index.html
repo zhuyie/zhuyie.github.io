@@ -48,66 +48,66 @@
 			<h2 id="起因">起因</h2>
 <p>最近在看一些CPU Microarchitecture相关的资料。其中的分支预测器<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup>，虽然知道概念，但其对性能的影响程度没有清晰的概念。因此，设计了一个小测试程序<sup id="fnref:2"><a href="#fn:2" class="footnote-ref" role="doc-noteref">2</a></sup>。</p>
 <h2 id="test-program">Test program</h2>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++"><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;cstdio&gt;</span><span style="color:#75715e">
-</span><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;cstdlib&gt;</span><span style="color:#75715e">
-</span><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;vector&gt;</span><span style="color:#75715e">
-</span><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;random&gt;</span><span style="color:#75715e">
-</span><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;algorithm&gt;</span><span style="color:#75715e">
-</span><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;chrono&gt;</span><span style="color:#75715e">
-</span><span style="color:#75715e"></span><span style="color:#66d9ef">using</span> <span style="color:#66d9ef">namespace</span> std<span style="color:#f92672">::</span>chrono;
-
-<span style="color:#66d9ef">static</span> <span style="color:#66d9ef">int</span> dummy[<span style="color:#ae81ff">2</span>];
-
-<span style="color:#66d9ef">int</span> <span style="color:#a6e22e">main</span>(<span style="color:#66d9ef">int</span> argc, <span style="color:#66d9ef">char</span><span style="color:#f92672">*</span> argv[])
-{
-    <span style="color:#75715e">// parsing command line
-</span><span style="color:#75715e"></span>    <span style="color:#66d9ef">bool</span> sort <span style="color:#f92672">=</span> false;
-    <span style="color:#66d9ef">if</span> (argc <span style="color:#f92672">&gt;</span> <span style="color:#ae81ff">1</span> <span style="color:#f92672">&amp;&amp;</span> strcmp(argv[<span style="color:#ae81ff">1</span>], <span style="color:#e6db74">&#34;1&#34;</span>) <span style="color:#f92672">==</span> <span style="color:#ae81ff">0</span>) {
-        sort <span style="color:#f92672">=</span> true;
-    }
-
-    <span style="color:#75715e">// prepare test data (uniformly distributed random values)
-</span><span style="color:#75715e"></span>    <span style="color:#66d9ef">const</span> <span style="color:#66d9ef">int</span> arraySize <span style="color:#f92672">=</span> <span style="color:#ae81ff">5000</span>;
-    std<span style="color:#f92672">::</span>vector<span style="color:#f92672">&lt;</span><span style="color:#66d9ef">int</span><span style="color:#f92672">&gt;</span> data;
-    data.resize(arraySize);
-
-    std<span style="color:#f92672">::</span>random_device rd;
-    std<span style="color:#f92672">::</span>mt19937 gen(rd());
-    std<span style="color:#f92672">::</span>uniform_int_distribution<span style="color:#f92672">&lt;&gt;</span> dis(<span style="color:#ae81ff">0</span>, <span style="color:#ae81ff">256</span>);
-    <span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">int</span> i <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>; i <span style="color:#f92672">&lt;</span> arraySize; i<span style="color:#f92672">++</span>) {
-        data[i] <span style="color:#f92672">=</span> dis(gen);
-    }
-
-    <span style="color:#75715e">// sort or not
-</span><span style="color:#75715e"></span>    <span style="color:#66d9ef">if</span> (sort) {
-        std<span style="color:#f92672">::</span>sort(data.begin(), data.end());
-    }
-
-    <span style="color:#66d9ef">auto</span> start <span style="color:#f92672">=</span> system_clock<span style="color:#f92672">::</span>now();
-    <span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">int</span> count[<span style="color:#ae81ff">2</span>];
-    <span style="color:#66d9ef">const</span> <span style="color:#66d9ef">int</span> testN <span style="color:#f92672">=</span> <span style="color:#ae81ff">100000</span>;
-    <span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">int</span> t <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>; t <span style="color:#f92672">&lt;</span> testN; <span style="color:#f92672">++</span>t) {
-        <span style="color:#75715e">// main loop
-</span><span style="color:#75715e"></span>        memset(count, <span style="color:#ae81ff">0</span>, <span style="color:#66d9ef">sizeof</span>(count));
-        <span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">int</span> i <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>; i <span style="color:#f92672">&lt;</span> arraySize; <span style="color:#f92672">++</span>i) {
-            <span style="color:#66d9ef">if</span> (data[i] <span style="color:#f92672">&lt;</span> <span style="color:#ae81ff">128</span>) {
-                dummy[<span style="color:#ae81ff">0</span>] <span style="color:#f92672">*=</span> dummy[<span style="color:#ae81ff">1</span>];  <span style="color:#75715e">// consume-a-few-cycles
-</span><span style="color:#75715e"></span>                count[<span style="color:#ae81ff">0</span>]<span style="color:#f92672">++</span>;            <span style="color:#75715e">// counting
-</span><span style="color:#75715e"></span>            } <span style="color:#66d9ef">else</span> {
-                dummy[<span style="color:#ae81ff">1</span>] <span style="color:#f92672">*=</span> dummy[<span style="color:#ae81ff">0</span>];  <span style="color:#75715e">// consume-a-few-cycles
-</span><span style="color:#75715e"></span>                count[<span style="color:#ae81ff">1</span>]<span style="color:#f92672">++</span>;            <span style="color:#75715e">// counting
-</span><span style="color:#75715e"></span>            }
-        }
-    }
-    <span style="color:#66d9ef">auto</span> duration <span style="color:#f92672">=</span> duration_cast<span style="color:#f92672">&lt;</span>microseconds<span style="color:#f92672">&gt;</span>(system_clock<span style="color:#f92672">::</span>now() <span style="color:#f92672">-</span> start);
-    
-    fprintf(stdout, <span style="color:#e6db74">&#34;sort  = %d</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#34;</span>, sort <span style="color:#f92672">?</span> true <span style="color:#f92672">:</span> false);
-    fprintf(stdout, <span style="color:#e6db74">&#34;total = %d</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#34;</span>, arraySize);
-    fprintf(stdout, <span style="color:#e6db74">&#34;count = [%u,%u]</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#34;</span>, count[<span style="color:#ae81ff">0</span>], count[<span style="color:#ae81ff">1</span>]);
-    fprintf(stdout, <span style="color:#e6db74">&#34;duration = %.2fms</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#34;</span>, duration.count()<span style="color:#f92672">/</span><span style="color:#ae81ff">1000.0</span>);
-    <span style="color:#66d9ef">return</span> <span style="color:#ae81ff">0</span>;
-}
-</code></pre></div><h2 id="说明">说明</h2>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-c++" data-lang="c++"><span style="display:flex;"><span><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;cstdio&gt;</span><span style="color:#75715e">
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;cstdlib&gt;</span><span style="color:#75715e">
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;vector&gt;</span><span style="color:#75715e">
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;random&gt;</span><span style="color:#75715e">
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;algorithm&gt;</span><span style="color:#75715e">
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;chrono&gt;</span><span style="color:#75715e">
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">using</span> <span style="color:#66d9ef">namespace</span> std<span style="color:#f92672">::</span>chrono;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">static</span> <span style="color:#66d9ef">int</span> dummy[<span style="color:#ae81ff">2</span>];
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">int</span> <span style="color:#a6e22e">main</span>(<span style="color:#66d9ef">int</span> argc, <span style="color:#66d9ef">char</span><span style="color:#f92672">*</span> argv[])
+</span></span><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// parsing command line
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    <span style="color:#66d9ef">bool</span> sort <span style="color:#f92672">=</span> false;
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> (argc <span style="color:#f92672">&gt;</span> <span style="color:#ae81ff">1</span> <span style="color:#f92672">&amp;&amp;</span> strcmp(argv[<span style="color:#ae81ff">1</span>], <span style="color:#e6db74">&#34;1&#34;</span>) <span style="color:#f92672">==</span> <span style="color:#ae81ff">0</span>) {
+</span></span><span style="display:flex;"><span>        sort <span style="color:#f92672">=</span> true;
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// prepare test data (uniformly distributed random values)
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    <span style="color:#66d9ef">const</span> <span style="color:#66d9ef">int</span> arraySize <span style="color:#f92672">=</span> <span style="color:#ae81ff">5000</span>;
+</span></span><span style="display:flex;"><span>    std<span style="color:#f92672">::</span>vector<span style="color:#f92672">&lt;</span><span style="color:#66d9ef">int</span><span style="color:#f92672">&gt;</span> data;
+</span></span><span style="display:flex;"><span>    data.resize(arraySize);
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    std<span style="color:#f92672">::</span>random_device rd;
+</span></span><span style="display:flex;"><span>    std<span style="color:#f92672">::</span>mt19937 gen(rd());
+</span></span><span style="display:flex;"><span>    std<span style="color:#f92672">::</span>uniform_int_distribution<span style="color:#f92672">&lt;&gt;</span> dis(<span style="color:#ae81ff">0</span>, <span style="color:#ae81ff">256</span>);
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">int</span> i <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>; i <span style="color:#f92672">&lt;</span> arraySize; i<span style="color:#f92672">++</span>) {
+</span></span><span style="display:flex;"><span>        data[i] <span style="color:#f92672">=</span> dis(gen);
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// sort or not
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    <span style="color:#66d9ef">if</span> (sort) {
+</span></span><span style="display:flex;"><span>        std<span style="color:#f92672">::</span>sort(data.begin(), data.end());
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">auto</span> start <span style="color:#f92672">=</span> system_clock<span style="color:#f92672">::</span>now();
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">int</span> count[<span style="color:#ae81ff">2</span>];
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">const</span> <span style="color:#66d9ef">int</span> testN <span style="color:#f92672">=</span> <span style="color:#ae81ff">100000</span>;
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">int</span> t <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>; t <span style="color:#f92672">&lt;</span> testN; <span style="color:#f92672">++</span>t) {
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// main loop
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>        memset(count, <span style="color:#ae81ff">0</span>, <span style="color:#66d9ef">sizeof</span>(count));
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">int</span> i <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>; i <span style="color:#f92672">&lt;</span> arraySize; <span style="color:#f92672">++</span>i) {
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">if</span> (data[i] <span style="color:#f92672">&lt;</span> <span style="color:#ae81ff">128</span>) {
+</span></span><span style="display:flex;"><span>                dummy[<span style="color:#ae81ff">0</span>] <span style="color:#f92672">*=</span> dummy[<span style="color:#ae81ff">1</span>];  <span style="color:#75715e">// consume-a-few-cycles
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>                count[<span style="color:#ae81ff">0</span>]<span style="color:#f92672">++</span>;            <span style="color:#75715e">// counting
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>            } <span style="color:#66d9ef">else</span> {
+</span></span><span style="display:flex;"><span>                dummy[<span style="color:#ae81ff">1</span>] <span style="color:#f92672">*=</span> dummy[<span style="color:#ae81ff">0</span>];  <span style="color:#75715e">// consume-a-few-cycles
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>                count[<span style="color:#ae81ff">1</span>]<span style="color:#f92672">++</span>;            <span style="color:#75715e">// counting
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>            }
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">auto</span> duration <span style="color:#f92672">=</span> duration_cast<span style="color:#f92672">&lt;</span>microseconds<span style="color:#f92672">&gt;</span>(system_clock<span style="color:#f92672">::</span>now() <span style="color:#f92672">-</span> start);
+</span></span><span style="display:flex;"><span>    
+</span></span><span style="display:flex;"><span>    fprintf(stdout, <span style="color:#e6db74">&#34;sort  = %d</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#34;</span>, sort <span style="color:#f92672">?</span> true <span style="color:#f92672">:</span> false);
+</span></span><span style="display:flex;"><span>    fprintf(stdout, <span style="color:#e6db74">&#34;total = %d</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#34;</span>, arraySize);
+</span></span><span style="display:flex;"><span>    fprintf(stdout, <span style="color:#e6db74">&#34;count = [%u,%u]</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#34;</span>, count[<span style="color:#ae81ff">0</span>], count[<span style="color:#ae81ff">1</span>]);
+</span></span><span style="display:flex;"><span>    fprintf(stdout, <span style="color:#e6db74">&#34;duration = %.2fms</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#34;</span>, duration.count()<span style="color:#f92672">/</span><span style="color:#ae81ff">1000.0</span>);
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> <span style="color:#ae81ff">0</span>;
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><h2 id="说明">说明</h2>
 <p>整个测试程序的流程大致分为如下几步：</p>
 <ol>
 <li>准备一个指定长度（这里用的5000）的<code>vector&lt;int&gt;</code>，将其填充为一系列指定范围（这里用的0-256）内<strong>均匀分布的随机数</strong>。</li>
@@ -128,23 +128,23 @@
 <img src="/images/cpu-branch-prediction-demo-1.png" alt=""></p>
 <p>可以看出，排序与否（进而影响分支预测准确率）对于性能的影响还是相当明显的。</p>
 <h2 id="references">References</h2>
-<section class="footnotes" role="doc-endnotes">
+<div class="footnotes" role="doc-endnotes">
 <hr>
 <ol>
-<li id="fn:1" role="doc-endnote">
+<li id="fn:1">
 <p><a href="https://en.wikipedia.org/wiki/Branch_predictor">https://en.wikipedia.org/wiki/Branch_predictor</a>&#160;<a href="#fnref:1" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
-<li id="fn:2" role="doc-endnote">
+<li id="fn:2">
 <p><a href="https://gist.github.com/zhuyie/1b7784d7fd457ada1ff45d3ce4771080">https://gist.github.com/zhuyie/1b7784d7fd457ada1ff45d3ce4771080</a>&#160;<a href="#fnref:2" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
-<li id="fn:3" role="doc-endnote">
+<li id="fn:3">
 <p><a href="https://en.wikipedia.org/wiki/Speculative_execution">https://en.wikipedia.org/wiki/Speculative_execution</a>&#160;<a href="#fnref:3" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
-<li id="fn:4" role="doc-endnote">
+<li id="fn:4">
 <p><a href="https://xania.org/201602/bpu-part-two">https://xania.org/201602/bpu-part-two</a>&#160;<a href="#fnref:4" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
 </ol>
-</section>
+</div>
 
 		</section>
 

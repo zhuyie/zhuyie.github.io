@@ -2,13 +2,16 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
   xmlns:xhtml="http://www.w3.org/1999/xhtml">
   <url>
-    <loc>https://zhuyie.github.io/posts/bsdiff-annotated/</loc>
-    <lastmod>2022-02-16T09:55:46+08:00</lastmod>
+    <loc>https://zhuyie.github.io/posts/happy-new-year-2023/</loc>
+    <lastmod>2022-12-31T09:20:52+08:00</lastmod>
   </url><url>
     <loc>https://zhuyie.github.io/posts/</loc>
-    <lastmod>2022-02-16T09:55:46+08:00</lastmod>
+    <lastmod>2022-12-31T09:20:52+08:00</lastmod>
   </url><url>
     <loc>https://zhuyie.github.io/</loc>
+    <lastmod>2022-12-31T09:20:52+08:00</lastmod>
+  </url><url>
+    <loc>https://zhuyie.github.io/posts/bsdiff-annotated/</loc>
     <lastmod>2022-02-16T09:55:46+08:00</lastmod>
   </url><url>
     <loc>https://zhuyie.github.io/posts/binary-to-text-encoding/</loc>

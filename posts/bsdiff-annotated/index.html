@@ -61,20 +61,20 @@
 <h2 id="源码解析">源码解析</h2>
 <h3 id="patchfile-format">patchfile format</h3>
 <p>这部分在bspatch.c中有较详细的注释：</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c" data-lang="c"><span style="color:#75715e">/*
-</span><span style="color:#75715e">File format:
-</span><span style="color:#75715e">	0	8	&#34;BSDIFF40&#34;
-</span><span style="color:#75715e">	8	8	X
-</span><span style="color:#75715e">	16	8	Y
-</span><span style="color:#75715e">	24	8	sizeof(newfile)
-</span><span style="color:#75715e">	32	X	bzip2(control block)
-</span><span style="color:#75715e">	32+X	Y	bzip2(diff block)
-</span><span style="color:#75715e">	32+X+Y	???	bzip2(extra block)
-</span><span style="color:#75715e">with control block a set of triples (x,y,z) meaning &#34;add x bytes
-</span><span style="color:#75715e">from oldfile to x bytes from the diff block; copy y bytes from the
-</span><span style="color:#75715e">extra block; seek forwards in oldfile by z bytes&#34;.
-</span><span style="color:#75715e">*/</span>
-</code></pre></div><p>依次为：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-c" data-lang="c"><span style="display:flex;"><span><span style="color:#75715e">/*
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e">File format:
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e">	0	8	&#34;BSDIFF40&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e">	8	8	X
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e">	16	8	Y
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e">	24	8	sizeof(newfile)
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e">	32	X	bzip2(control block)
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e">	32+X	Y	bzip2(diff block)
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e">	32+X+Y	???	bzip2(extra block)
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e">with control block a set of triples (x,y,z) meaning &#34;add x bytes
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e">from oldfile to x bytes from the diff block; copy y bytes from the
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e">extra block; seek forwards in oldfile by z bytes&#34;.
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e">*/</span>
+</span></span></code></pre></div><p>依次为：</p>
 <ul>
 <li>文件格式签名，8字节常量&quot;BSDIFF40&quot;；</li>
 <li>control block压缩流的长度（X），8字节整数；</li>
@@ -114,174 +114,174 @@
 <p>因此，bsdiff算法的核心，就是对newfile<strong>从前向后尝试</strong>，在oldfile中<strong>搜寻</strong>一个和newfile当前位置开始的内容<strong>近似匹配</strong>（approximate matches）的<strong>对应区段</strong>，这个近似匹配中包含一段“与源码修改无直接关系的区域”，可能再跟着一段“存在源码修改的区域”。基于这个对应区段构建一组ctrl以及相关联的diff和extra数据。持续此过程直至newfile文件结束，然后将所得的control block, diff block和extra block按前述文件格式生成patch文件。</p>
 <p>接下来我们实际看下bsdiff.c的流程。</p>
 <p>◈ 首先是判断输入参数是否合法。程序需要3个参数，argv[1], argv[2]和argv[3]分别对应oldfile, newfile和patchfile的文件路径。</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c" data-lang="c">	<span style="color:#66d9ef">if</span>(argc<span style="color:#f92672">!=</span><span style="color:#ae81ff">4</span>) errx(<span style="color:#ae81ff">1</span>,<span style="color:#e6db74">&#34;usage: %s oldfile newfile patchfile</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#34;</span>,argv[<span style="color:#ae81ff">0</span>]);
-</code></pre></div><p>◈ 打开oldfile，分配对应大小的buffer，将文件内容读取到内存buffer中。之所以要<code>malloc(oldsize+1)</code>是因为oldsize<strong>可能为0</strong>，与之相对的newsize也可能为0。</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c" data-lang="c">	<span style="color:#75715e">/* Allocate oldsize+1 bytes instead of oldsize bytes to ensure
-</span><span style="color:#75715e">		that we never try to malloc(0) and get a NULL pointer */</span>
-	<span style="color:#66d9ef">if</span>(((fd<span style="color:#f92672">=</span>open(argv[<span style="color:#ae81ff">1</span>],O_RDONLY,<span style="color:#ae81ff">0</span>))<span style="color:#f92672">&lt;</span><span style="color:#ae81ff">0</span>) <span style="color:#f92672">||</span>
-		((oldsize<span style="color:#f92672">=</span>lseek(fd,<span style="color:#ae81ff">0</span>,SEEK_END))<span style="color:#f92672">==-</span><span style="color:#ae81ff">1</span>) <span style="color:#f92672">||</span>
-		((old<span style="color:#f92672">=</span>malloc(oldsize<span style="color:#f92672">+</span><span style="color:#ae81ff">1</span>))<span style="color:#f92672">==</span>NULL) <span style="color:#f92672">||</span>
-		(lseek(fd,<span style="color:#ae81ff">0</span>,SEEK_SET)<span style="color:#f92672">!=</span><span style="color:#ae81ff">0</span>) <span style="color:#f92672">||</span>
-		(read(fd,old,oldsize)<span style="color:#f92672">!=</span>oldsize) <span style="color:#f92672">||</span>
-		(close(fd)<span style="color:#f92672">==-</span><span style="color:#ae81ff">1</span>)) err(<span style="color:#ae81ff">1</span>,<span style="color:#e6db74">&#34;%s&#34;</span>,argv[<span style="color:#ae81ff">1</span>]);
-</code></pre></div><p>◈ 基于oldfile的内容构建一个<strong>后缀数组</strong>（suffix array<sup id="fnref:6"><a href="#fn:6" class="footnote-ref" role="doc-noteref">6</a></sup>），用于后面在oldfile中快速搜索与newfile中内容匹配的区域。bsdiff使用<a href="https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.77.6745&amp;rep=rep1&amp;type=pdf">qsufsort</a>来进行后缀排序，这个算法需要用到两个额外数组I和V，其中I用于保存结果后缀数组，V为辅助空间，执行完就可以释放。</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-c" data-lang="c"><span style="display:flex;"><span>	<span style="color:#66d9ef">if</span>(argc<span style="color:#f92672">!=</span><span style="color:#ae81ff">4</span>) errx(<span style="color:#ae81ff">1</span>,<span style="color:#e6db74">&#34;usage: %s oldfile newfile patchfile</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#34;</span>,argv[<span style="color:#ae81ff">0</span>]);
+</span></span></code></pre></div><p>◈ 打开oldfile，分配对应大小的buffer，将文件内容读取到内存buffer中。之所以要<code>malloc(oldsize+1)</code>是因为oldsize<strong>可能为0</strong>，与之相对的newsize也可能为0。</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-c" data-lang="c"><span style="display:flex;"><span>	<span style="color:#75715e">/* Allocate oldsize+1 bytes instead of oldsize bytes to ensure
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e">		that we never try to malloc(0) and get a NULL pointer */</span>
+</span></span><span style="display:flex;"><span>	<span style="color:#66d9ef">if</span>(((fd<span style="color:#f92672">=</span>open(argv[<span style="color:#ae81ff">1</span>],O_RDONLY,<span style="color:#ae81ff">0</span>))<span style="color:#f92672">&lt;</span><span style="color:#ae81ff">0</span>) <span style="color:#f92672">||</span>
+</span></span><span style="display:flex;"><span>		((oldsize<span style="color:#f92672">=</span>lseek(fd,<span style="color:#ae81ff">0</span>,SEEK_END))<span style="color:#f92672">==-</span><span style="color:#ae81ff">1</span>) <span style="color:#f92672">||</span>
+</span></span><span style="display:flex;"><span>		((old<span style="color:#f92672">=</span>malloc(oldsize<span style="color:#f92672">+</span><span style="color:#ae81ff">1</span>))<span style="color:#f92672">==</span>NULL) <span style="color:#f92672">||</span>
+</span></span><span style="display:flex;"><span>		(lseek(fd,<span style="color:#ae81ff">0</span>,SEEK_SET)<span style="color:#f92672">!=</span><span style="color:#ae81ff">0</span>) <span style="color:#f92672">||</span>
+</span></span><span style="display:flex;"><span>		(read(fd,old,oldsize)<span style="color:#f92672">!=</span>oldsize) <span style="color:#f92672">||</span>
+</span></span><span style="display:flex;"><span>		(close(fd)<span style="color:#f92672">==-</span><span style="color:#ae81ff">1</span>)) err(<span style="color:#ae81ff">1</span>,<span style="color:#e6db74">&#34;%s&#34;</span>,argv[<span style="color:#ae81ff">1</span>]);
+</span></span></code></pre></div><p>◈ 基于oldfile的内容构建一个<strong>后缀数组</strong>（suffix array<sup id="fnref:6"><a href="#fn:6" class="footnote-ref" role="doc-noteref">6</a></sup>），用于后面在oldfile中快速搜索与newfile中内容匹配的区域。bsdiff使用<a href="https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.77.6745&amp;rep=rep1&amp;type=pdf">qsufsort</a>来进行后缀排序，这个算法需要用到两个额外数组I和V，其中I用于保存结果后缀数组，V为辅助空间，执行完就可以释放。</p>
 <p>可以不去理解qsufsort函数（及其辅助函数split）的内部实现。首先把它当成<strong>黑盒</strong>不影响对bsdiff流程的理解，只要你知道suffix array是什么东西；其次qsufsort在今天看起来并不是一个很好的后缀排序实现，可以考虑将它替换成其它更优的库。</p>
 <p>需要关注的点是这块的内存占用。off_t在32位环境下一般typedef为int，占用4字节。设oldfile的size为n，则I和V这两个数组会占用8n的内存空间，再加上之前已经加载到内存的一份oldfile，我们的<strong>峰值内存需求</strong>已经达到了9n！如果要考虑64位就更加恐怖了。</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c" data-lang="c">	<span style="color:#66d9ef">if</span>(((I<span style="color:#f92672">=</span>malloc((oldsize<span style="color:#f92672">+</span><span style="color:#ae81ff">1</span>)<span style="color:#f92672">*</span><span style="color:#66d9ef">sizeof</span>(off_t)))<span style="color:#f92672">==</span>NULL) <span style="color:#f92672">||</span>
-		((V<span style="color:#f92672">=</span>malloc((oldsize<span style="color:#f92672">+</span><span style="color:#ae81ff">1</span>)<span style="color:#f92672">*</span><span style="color:#66d9ef">sizeof</span>(off_t)))<span style="color:#f92672">==</span>NULL)) err(<span style="color:#ae81ff">1</span>,NULL);
-
-	qsufsort(I,V,old,oldsize);
-
-	free(V);
-</code></pre></div><p>◈ 将newfile读取到内存中：</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c" data-lang="c">	<span style="color:#75715e">/* Allocate newsize+1 bytes instead of newsize bytes to ensure
-</span><span style="color:#75715e">		that we never try to malloc(0) and get a NULL pointer */</span>
-	<span style="color:#66d9ef">if</span>(((fd<span style="color:#f92672">=</span>open(argv[<span style="color:#ae81ff">2</span>],O_RDONLY,<span style="color:#ae81ff">0</span>))<span style="color:#f92672">&lt;</span><span style="color:#ae81ff">0</span>) <span style="color:#f92672">||</span>
-		((newsize<span style="color:#f92672">=</span>lseek(fd,<span style="color:#ae81ff">0</span>,SEEK_END))<span style="color:#f92672">==-</span><span style="color:#ae81ff">1</span>) <span style="color:#f92672">||</span>
-		((new<span style="color:#f92672">=</span>malloc(newsize<span style="color:#f92672">+</span><span style="color:#ae81ff">1</span>))<span style="color:#f92672">==</span>NULL) <span style="color:#f92672">||</span>
-		(lseek(fd,<span style="color:#ae81ff">0</span>,SEEK_SET)<span style="color:#f92672">!=</span><span style="color:#ae81ff">0</span>) <span style="color:#f92672">||</span>
-		(read(fd,new,newsize)<span style="color:#f92672">!=</span>newsize) <span style="color:#f92672">||</span>
-		(close(fd)<span style="color:#f92672">==-</span><span style="color:#ae81ff">1</span>)) err(<span style="color:#ae81ff">1</span>,<span style="color:#e6db74">&#34;%s&#34;</span>,argv[<span style="color:#ae81ff">2</span>]);
-</code></pre></div><p>◈ 为db和eb这两个buffer分配内存。这两个buffer对应的是子文件diff block和extra block，其最大长度不会超过newsize（因为它们对应到newfile的某些部分）。它们的内容会在后面的步骤中逐渐写入，dblen和eblen用于描述它们当前有效数据的长度。</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c" data-lang="c">	<span style="color:#66d9ef">if</span>(((db<span style="color:#f92672">=</span>malloc(newsize<span style="color:#f92672">+</span><span style="color:#ae81ff">1</span>))<span style="color:#f92672">==</span>NULL) <span style="color:#f92672">||</span>
-		((eb<span style="color:#f92672">=</span>malloc(newsize<span style="color:#f92672">+</span><span style="color:#ae81ff">1</span>))<span style="color:#f92672">==</span>NULL)) err(<span style="color:#ae81ff">1</span>,NULL);
-	dblen<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;
-	eblen<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;
-</code></pre></div><p>◈ 创建patchfile，写入一个用来占位的文件头，其内容在主循环走完以后还会再更新。</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c" data-lang="c">	<span style="color:#75715e">/* Create the patch file */</span>
-	<span style="color:#66d9ef">if</span> ((pf <span style="color:#f92672">=</span> fopen(argv[<span style="color:#ae81ff">3</span>], <span style="color:#e6db74">&#34;w&#34;</span>)) <span style="color:#f92672">==</span> NULL)
-		err(<span style="color:#ae81ff">1</span>, <span style="color:#e6db74">&#34;%s&#34;</span>, argv[<span style="color:#ae81ff">3</span>]);
-
-	memcpy(header,<span style="color:#e6db74">&#34;BSDIFF40&#34;</span>,<span style="color:#ae81ff">8</span>);
-	offtout(<span style="color:#ae81ff">0</span>, header <span style="color:#f92672">+</span> <span style="color:#ae81ff">8</span>);
-	offtout(<span style="color:#ae81ff">0</span>, header <span style="color:#f92672">+</span> <span style="color:#ae81ff">16</span>);
-	offtout(newsize, header <span style="color:#f92672">+</span> <span style="color:#ae81ff">24</span>);
-	<span style="color:#66d9ef">if</span> (fwrite(header, <span style="color:#ae81ff">32</span>, <span style="color:#ae81ff">1</span>, pf) <span style="color:#f92672">!=</span> <span style="color:#ae81ff">1</span>)
-		err(<span style="color:#ae81ff">1</span>, <span style="color:#e6db74">&#34;fwrite(%s)&#34;</span>, argv[<span style="color:#ae81ff">3</span>]);
-</code></pre></div><p>◈ pf的当前file position为32，此时基于pf创建一个bzip文件句柄（因此结果bzip压缩流会写入在32字节偏移开始的区域），用于control block的写入：</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c" data-lang="c">	<span style="color:#75715e">/* Compute the differences, writing ctrl as we go */</span>
-	<span style="color:#66d9ef">if</span> ((pfbz2 <span style="color:#f92672">=</span> BZ2_bzWriteOpen(<span style="color:#f92672">&amp;</span>bz2err, pf, <span style="color:#ae81ff">9</span>, <span style="color:#ae81ff">0</span>, <span style="color:#ae81ff">0</span>)) <span style="color:#f92672">==</span> NULL)
-		errx(<span style="color:#ae81ff">1</span>, <span style="color:#e6db74">&#34;BZ2_bzWriteOpen, bz2err = %d&#34;</span>, bz2err);
-</code></pre></div><p>◈ 接下来是主循环了，这部分逻辑较为复杂，我们先将它进行简化，整理出结构。</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c" data-lang="c">	scan<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;len<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;
-	<span style="color:#75715e">// lastscan是当前“候选”匹配区域在new中的开始位置；
-</span><span style="color:#75715e"></span>	<span style="color:#75715e">// lastpos 是当前“候选”匹配区域在old中的开始位置；
-</span><span style="color:#75715e"></span>	<span style="color:#75715e">// lastoffset是当前“候选”匹配区域中old中位置相对于new中对应位置的差值，
-</span><span style="color:#75715e"></span>	<span style="color:#75715e">//   因此&lt;new_pos&gt;+lastoffset=&lt;old_pos&gt;；
-</span><span style="color:#75715e"></span>	lastscan<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;lastpos<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;lastoffset<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;
-	<span style="color:#75715e">// 循环处理整个newfile
-</span><span style="color:#75715e"></span>	<span style="color:#66d9ef">while</span>(scan<span style="color:#f92672">&lt;</span>newsize) {
-		oldscore<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;
-
-		<span style="color:#75715e">// 从scan开始向后搜索，符合某种条件时跳出循环；
-</span><span style="color:#75715e"></span>		<span style="color:#66d9ef">for</span>(scsc<span style="color:#f92672">=</span>scan<span style="color:#f92672">+=</span>len;scan<span style="color:#f92672">&lt;</span>newsize;scan<span style="color:#f92672">++</span>) {
-			...
-		};
-
-		<span style="color:#75715e">// len!=oldscore说明当前“候选”匹配区域不需要再继续向后搜索了；
-</span><span style="color:#75715e"></span>		<span style="color:#75715e">// scan==newsize说明已经已到达文件尾；
-</span><span style="color:#75715e"></span>		<span style="color:#75715e">// 符合这两个条件之一时，我们开始处理当前这个近似匹配区域；
-</span><span style="color:#75715e"></span>		<span style="color:#66d9ef">if</span>((len<span style="color:#f92672">!=</span>oldscore) <span style="color:#f92672">||</span> (scan<span style="color:#f92672">==</span>newsize)) {
-			<span style="color:#75715e">// 确定lenf的长度。区域[lastscan, lastscan+lenf)被称为forward extension
-</span><span style="color:#75715e"></span>			s<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;Sf<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;lenf<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;
-			<span style="color:#66d9ef">for</span>(i<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;(lastscan<span style="color:#f92672">+</span>i<span style="color:#f92672">&lt;</span>scan)<span style="color:#f92672">&amp;&amp;</span>(lastpos<span style="color:#f92672">+</span>i<span style="color:#f92672">&lt;</span>oldsize);) {
-				...
-			};
-
-			<span style="color:#75715e">// 确定lenb的长度。区域[scan-lenb, scan)被称为backward extension
-</span><span style="color:#75715e"></span>			lenb<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;
-			<span style="color:#66d9ef">if</span>(scan<span style="color:#f92672">&lt;</span>newsize) {
-				s<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;Sb<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;
-				<span style="color:#66d9ef">for</span>(i<span style="color:#f92672">=</span><span style="color:#ae81ff">1</span>;(scan<span style="color:#f92672">&gt;=</span>lastscan<span style="color:#f92672">+</span>i)<span style="color:#f92672">&amp;&amp;</span>(pos<span style="color:#f92672">&gt;=</span>i);i<span style="color:#f92672">++</span>) {
-					...
-				};
-			};
-
-			<span style="color:#66d9ef">if</span>(lastscan<span style="color:#f92672">+</span>lenf<span style="color:#f92672">&gt;</span>scan<span style="color:#f92672">-</span>lenb) {
-				<span style="color:#75715e">// forword extension和backward extension区域出现重叠时需要调整lenf和lenb
-</span><span style="color:#75715e"></span>				...
-			};
-
-			<span style="color:#75715e">// forward extension即为diff区段，减去old中对应位置的值，结果写到db中
-</span><span style="color:#75715e"></span>			<span style="color:#66d9ef">for</span>(i<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;i<span style="color:#f92672">&lt;</span>lenf;i<span style="color:#f92672">++</span>)
-				db[dblen<span style="color:#f92672">+</span>i]<span style="color:#f92672">=</span>new[lastscan<span style="color:#f92672">+</span>i]<span style="color:#f92672">-</span>old[lastpos<span style="color:#f92672">+</span>i];
-			<span style="color:#75715e">// forward extension和backward extension若不相连，两者中间的区域
-</span><span style="color:#75715e"></span>			<span style="color:#75715e">// 即为extra区段，其内容直接复制到eb中
-</span><span style="color:#75715e"></span>			<span style="color:#66d9ef">for</span>(i<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;i<span style="color:#f92672">&lt;</span>(scan<span style="color:#f92672">-</span>lenb)<span style="color:#f92672">-</span>(lastscan<span style="color:#f92672">+</span>lenf);i<span style="color:#f92672">++</span>)
-				eb[eblen<span style="color:#f92672">+</span>i]<span style="color:#f92672">=</span>new[lastscan<span style="color:#f92672">+</span>lenf<span style="color:#f92672">+</span>i];
-
-			dblen<span style="color:#f92672">+=</span>lenf;
-			eblen<span style="color:#f92672">+=</span>(scan<span style="color:#f92672">-</span>lenb)<span style="color:#f92672">-</span>(lastscan<span style="color:#f92672">+</span>lenf);
-
-			<span style="color:#75715e">// 写入三元组的x
-</span><span style="color:#75715e"></span>			offtout(lenf,buf);
-			...
-			<span style="color:#75715e">// 写入三元组的y
-</span><span style="color:#75715e"></span>			offtout((scan<span style="color:#f92672">-</span>lenb)<span style="color:#f92672">-</span>(lastscan<span style="color:#f92672">+</span>lenf),buf);
-			...
-			<span style="color:#75715e">// 写入三元组的z
-</span><span style="color:#75715e"></span>			offtout((pos<span style="color:#f92672">-</span>lenb)<span style="color:#f92672">-</span>(lastpos<span style="color:#f92672">+</span>lenf),buf);
-			...
-
-			<span style="color:#75715e">// backward extension会被作为下一轮“候选”匹配区域的开始部分，
-</span><span style="color:#75715e"></span>			<span style="color:#75715e">// 也就是变成下一次的forward extension的一部分
-</span><span style="color:#75715e"></span>			lastscan<span style="color:#f92672">=</span>scan<span style="color:#f92672">-</span>lenb;
-			lastpos<span style="color:#f92672">=</span>pos<span style="color:#f92672">-</span>lenb;
-			lastoffset<span style="color:#f92672">=</span>pos<span style="color:#f92672">-</span>scan;
-		};
-	};
-</code></pre></div><p>细看下确定scan, len和oldscore的逻辑：</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c" data-lang="c">		<span style="color:#75715e">// 当前“候选”匹配区域为：new[lastscan, scan) &lt;-&gt; old[lastpos, scan+lastoffset)
-</span><span style="color:#75715e"></span>
-		<span style="color:#75715e">// 重置oldscore
-</span><span style="color:#75715e"></span>		oldscore<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;
-
-		<span style="color:#75715e">// 注意scan值变动的方式：进入循环时(+=len)，之后每执行完一次时(++)；
-</span><span style="color:#75715e"></span>		<span style="color:#66d9ef">for</span>(scsc<span style="color:#f92672">=</span>scan<span style="color:#f92672">+=</span>len;scan<span style="color:#f92672">&lt;</span>newsize;scan<span style="color:#f92672">++</span>) {
-			<span style="color:#75715e">// 这里对new中scan处开始的内容，在old中搜索一个完全匹配区域。
-</span><span style="color:#75715e"></span>			<span style="color:#75715e">// len返回完全匹配区域的长度，pos为old中与scan所对应的位置。
-</span><span style="color:#75715e"></span>			<span style="color:#75715e">// search函数是一个标准的二分查找算法，I是前面构建出来的后缀数组。
-</span><span style="color:#75715e"></span>			len<span style="color:#f92672">=</span>search(I,old,oldsize,new<span style="color:#f92672">+</span>scan,newsize<span style="color:#f92672">-</span>scan,
-					<span style="color:#ae81ff">0</span>,oldsize,<span style="color:#f92672">&amp;</span>pos);
-
-			<span style="color:#75715e">// 上一步的搜索，得到了“候选”匹配区域new的向后延伸，在old中完全匹配区域的开始位置和长度，
-</span><span style="color:#75715e"></span>			<span style="color:#75715e">//   但这个开始位置和“候选”匹配区域中old的结束位置有可能并不相连。
-</span><span style="color:#75715e"></span>
-			<span style="color:#75715e">// 统计new中[scan, scan+len)与old中“候选”匹配区域的对应延伸区段中相等的字节数，
-</span><span style="color:#75715e"></span>			<span style="color:#75715e">// 累加到oldscore中。注意循环变量是scsc，因此不会重复累加。
-</span><span style="color:#75715e"></span>			<span style="color:#66d9ef">for</span>(;scsc<span style="color:#f92672">&lt;</span>scan<span style="color:#f92672">+</span>len;scsc<span style="color:#f92672">++</span>)
-			<span style="color:#66d9ef">if</span>((scsc<span style="color:#f92672">+</span>lastoffset<span style="color:#f92672">&lt;</span>oldsize) <span style="color:#f92672">&amp;&amp;</span>
-				(old[scsc<span style="color:#f92672">+</span>lastoffset] <span style="color:#f92672">==</span> new[scsc]))
-				oldscore<span style="color:#f92672">++</span>;
-
-			<span style="color:#75715e">// (len==oldscore) &amp;&amp; (len!=0) 说明当前“候选”区域的延伸区域仍然匹配的很好，
-</span><span style="color:#75715e"></span>			<span style="color:#75715e">//   那么可以扩展“候选”匹配区域，并继续向后搜索；
-</span><span style="color:#75715e"></span>			<span style="color:#75715e">// (len&gt;oldscore+8) 说明延伸区域中至少有8个以上的字节是不匹配的，
-</span><span style="color:#75715e"></span>			<span style="color:#75715e">//   那么当前“候选”区域应该到此截止而不扩展；
-</span><span style="color:#75715e"></span>			<span style="color:#66d9ef">if</span>(((len<span style="color:#f92672">==</span>oldscore) <span style="color:#f92672">&amp;&amp;</span> (len<span style="color:#f92672">!=</span><span style="color:#ae81ff">0</span>)) <span style="color:#f92672">||</span> 
-				(len<span style="color:#f92672">&gt;</span>oldscore<span style="color:#f92672">+</span><span style="color:#ae81ff">8</span>)) <span style="color:#66d9ef">break</span>;
-
-			<span style="color:#75715e">// 走到这里说明当前不相等的字节数没有大于8，需要继续循环。
-</span><span style="color:#75715e"></span>			<span style="color:#75715e">// 由于下次循环是从scan+1的位置上尝试，因此若scan对应的字节是相等的，
-</span><span style="color:#75715e"></span>			<span style="color:#75715e">// 它已经被计算在oldscore之内的值需要被减掉。
-</span><span style="color:#75715e"></span>			<span style="color:#66d9ef">if</span>((scan<span style="color:#f92672">+</span>lastoffset<span style="color:#f92672">&lt;</span>oldsize) <span style="color:#f92672">&amp;&amp;</span>
-				(old[scan<span style="color:#f92672">+</span>lastoffset] <span style="color:#f92672">==</span> new[scan]))
-				oldscore<span style="color:#f92672">--</span>;
-		};
-</code></pre></div><p>再看一下确定lenf长度部分的逻辑，后面的lenb，以及lenf和lenb重叠时的处理，逻辑类似：</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c" data-lang="c">			s<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;Sf<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;lenf<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;
-			<span style="color:#75715e">// 从lastscan开始向后搜索，上界为scan
-</span><span style="color:#75715e"></span>			<span style="color:#66d9ef">for</span>(i<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;(lastscan<span style="color:#f92672">+</span>i<span style="color:#f92672">&lt;</span>scan)<span style="color:#f92672">&amp;&amp;</span>(lastpos<span style="color:#f92672">+</span>i<span style="color:#f92672">&lt;</span>oldsize);) {
-				<span style="color:#75715e">// s记录对应字节相等的次数
-</span><span style="color:#75715e"></span>				<span style="color:#66d9ef">if</span>(old[lastpos<span style="color:#f92672">+</span>i]<span style="color:#f92672">==</span>new[lastscan<span style="color:#f92672">+</span>i]) s<span style="color:#f92672">++</span>;
-				i<span style="color:#f92672">++</span>;
-				<span style="color:#75715e">// Sf保存着lenf更新时对应的s，两者的初始值均为0，因此这个判断最开始
-</span><span style="color:#75715e"></span>				<span style="color:#75715e">// 相当于if(s*2-i&gt;0)，也就是是否有50%以上的i对应的字节是相同的。
-</span><span style="color:#75715e"></span>				<span style="color:#75715e">// 在lenf更新过1次以后，这个判断相当于比较当前相同比率是否比前一次候选
-</span><span style="color:#75715e"></span>				<span style="color:#75715e">// lenf所对应的相同比率更高。
-</span><span style="color:#75715e"></span>				<span style="color:#66d9ef">if</span>(s<span style="color:#f92672">*</span><span style="color:#ae81ff">2</span><span style="color:#f92672">-</span>i<span style="color:#f92672">&gt;</span>Sf<span style="color:#f92672">*</span><span style="color:#ae81ff">2</span><span style="color:#f92672">-</span>lenf) { Sf<span style="color:#f92672">=</span>s; lenf<span style="color:#f92672">=</span>i; };
-			};
-</code></pre></div><p>简单总结：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-c" data-lang="c"><span style="display:flex;"><span>	<span style="color:#66d9ef">if</span>(((I<span style="color:#f92672">=</span>malloc((oldsize<span style="color:#f92672">+</span><span style="color:#ae81ff">1</span>)<span style="color:#f92672">*</span><span style="color:#66d9ef">sizeof</span>(off_t)))<span style="color:#f92672">==</span>NULL) <span style="color:#f92672">||</span>
+</span></span><span style="display:flex;"><span>		((V<span style="color:#f92672">=</span>malloc((oldsize<span style="color:#f92672">+</span><span style="color:#ae81ff">1</span>)<span style="color:#f92672">*</span><span style="color:#66d9ef">sizeof</span>(off_t)))<span style="color:#f92672">==</span>NULL)) err(<span style="color:#ae81ff">1</span>,NULL);
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>	qsufsort(I,V,old,oldsize);
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>	free(V);
+</span></span></code></pre></div><p>◈ 将newfile读取到内存中：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-c" data-lang="c"><span style="display:flex;"><span>	<span style="color:#75715e">/* Allocate newsize+1 bytes instead of newsize bytes to ensure
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e">		that we never try to malloc(0) and get a NULL pointer */</span>
+</span></span><span style="display:flex;"><span>	<span style="color:#66d9ef">if</span>(((fd<span style="color:#f92672">=</span>open(argv[<span style="color:#ae81ff">2</span>],O_RDONLY,<span style="color:#ae81ff">0</span>))<span style="color:#f92672">&lt;</span><span style="color:#ae81ff">0</span>) <span style="color:#f92672">||</span>
+</span></span><span style="display:flex;"><span>		((newsize<span style="color:#f92672">=</span>lseek(fd,<span style="color:#ae81ff">0</span>,SEEK_END))<span style="color:#f92672">==-</span><span style="color:#ae81ff">1</span>) <span style="color:#f92672">||</span>
+</span></span><span style="display:flex;"><span>		((new<span style="color:#f92672">=</span>malloc(newsize<span style="color:#f92672">+</span><span style="color:#ae81ff">1</span>))<span style="color:#f92672">==</span>NULL) <span style="color:#f92672">||</span>
+</span></span><span style="display:flex;"><span>		(lseek(fd,<span style="color:#ae81ff">0</span>,SEEK_SET)<span style="color:#f92672">!=</span><span style="color:#ae81ff">0</span>) <span style="color:#f92672">||</span>
+</span></span><span style="display:flex;"><span>		(read(fd,new,newsize)<span style="color:#f92672">!=</span>newsize) <span style="color:#f92672">||</span>
+</span></span><span style="display:flex;"><span>		(close(fd)<span style="color:#f92672">==-</span><span style="color:#ae81ff">1</span>)) err(<span style="color:#ae81ff">1</span>,<span style="color:#e6db74">&#34;%s&#34;</span>,argv[<span style="color:#ae81ff">2</span>]);
+</span></span></code></pre></div><p>◈ 为db和eb这两个buffer分配内存。这两个buffer对应的是子文件diff block和extra block，其最大长度不会超过newsize（因为它们对应到newfile的某些部分）。它们的内容会在后面的步骤中逐渐写入，dblen和eblen用于描述它们当前有效数据的长度。</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-c" data-lang="c"><span style="display:flex;"><span>	<span style="color:#66d9ef">if</span>(((db<span style="color:#f92672">=</span>malloc(newsize<span style="color:#f92672">+</span><span style="color:#ae81ff">1</span>))<span style="color:#f92672">==</span>NULL) <span style="color:#f92672">||</span>
+</span></span><span style="display:flex;"><span>		((eb<span style="color:#f92672">=</span>malloc(newsize<span style="color:#f92672">+</span><span style="color:#ae81ff">1</span>))<span style="color:#f92672">==</span>NULL)) err(<span style="color:#ae81ff">1</span>,NULL);
+</span></span><span style="display:flex;"><span>	dblen<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;
+</span></span><span style="display:flex;"><span>	eblen<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;
+</span></span></code></pre></div><p>◈ 创建patchfile，写入一个用来占位的文件头，其内容在主循环走完以后还会再更新。</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-c" data-lang="c"><span style="display:flex;"><span>	<span style="color:#75715e">/* Create the patch file */</span>
+</span></span><span style="display:flex;"><span>	<span style="color:#66d9ef">if</span> ((pf <span style="color:#f92672">=</span> fopen(argv[<span style="color:#ae81ff">3</span>], <span style="color:#e6db74">&#34;w&#34;</span>)) <span style="color:#f92672">==</span> NULL)
+</span></span><span style="display:flex;"><span>		err(<span style="color:#ae81ff">1</span>, <span style="color:#e6db74">&#34;%s&#34;</span>, argv[<span style="color:#ae81ff">3</span>]);
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>	memcpy(header,<span style="color:#e6db74">&#34;BSDIFF40&#34;</span>,<span style="color:#ae81ff">8</span>);
+</span></span><span style="display:flex;"><span>	offtout(<span style="color:#ae81ff">0</span>, header <span style="color:#f92672">+</span> <span style="color:#ae81ff">8</span>);
+</span></span><span style="display:flex;"><span>	offtout(<span style="color:#ae81ff">0</span>, header <span style="color:#f92672">+</span> <span style="color:#ae81ff">16</span>);
+</span></span><span style="display:flex;"><span>	offtout(newsize, header <span style="color:#f92672">+</span> <span style="color:#ae81ff">24</span>);
+</span></span><span style="display:flex;"><span>	<span style="color:#66d9ef">if</span> (fwrite(header, <span style="color:#ae81ff">32</span>, <span style="color:#ae81ff">1</span>, pf) <span style="color:#f92672">!=</span> <span style="color:#ae81ff">1</span>)
+</span></span><span style="display:flex;"><span>		err(<span style="color:#ae81ff">1</span>, <span style="color:#e6db74">&#34;fwrite(%s)&#34;</span>, argv[<span style="color:#ae81ff">3</span>]);
+</span></span></code></pre></div><p>◈ pf的当前file position为32，此时基于pf创建一个bzip文件句柄（因此结果bzip压缩流会写入在32字节偏移开始的区域），用于control block的写入：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-c" data-lang="c"><span style="display:flex;"><span>	<span style="color:#75715e">/* Compute the differences, writing ctrl as we go */</span>
+</span></span><span style="display:flex;"><span>	<span style="color:#66d9ef">if</span> ((pfbz2 <span style="color:#f92672">=</span> BZ2_bzWriteOpen(<span style="color:#f92672">&amp;</span>bz2err, pf, <span style="color:#ae81ff">9</span>, <span style="color:#ae81ff">0</span>, <span style="color:#ae81ff">0</span>)) <span style="color:#f92672">==</span> NULL)
+</span></span><span style="display:flex;"><span>		errx(<span style="color:#ae81ff">1</span>, <span style="color:#e6db74">&#34;BZ2_bzWriteOpen, bz2err = %d&#34;</span>, bz2err);
+</span></span></code></pre></div><p>◈ 接下来是主循环了，这部分逻辑较为复杂，我们先将它进行简化，整理出结构。</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-c" data-lang="c"><span style="display:flex;"><span>	scan<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;len<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;
+</span></span><span style="display:flex;"><span>	<span style="color:#75715e">// lastscan是当前“候选”匹配区域在new中的开始位置；
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>	<span style="color:#75715e">// lastpos 是当前“候选”匹配区域在old中的开始位置；
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>	<span style="color:#75715e">// lastoffset是当前“候选”匹配区域中old中位置相对于new中对应位置的差值，
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>	<span style="color:#75715e">//   因此&lt;new_pos&gt;+lastoffset=&lt;old_pos&gt;；
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>	lastscan<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;lastpos<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;lastoffset<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;
+</span></span><span style="display:flex;"><span>	<span style="color:#75715e">// 循环处理整个newfile
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>	<span style="color:#66d9ef">while</span>(scan<span style="color:#f92672">&lt;</span>newsize) {
+</span></span><span style="display:flex;"><span>		oldscore<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>		<span style="color:#75715e">// 从scan开始向后搜索，符合某种条件时跳出循环；
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>		<span style="color:#66d9ef">for</span>(scsc<span style="color:#f92672">=</span>scan<span style="color:#f92672">+=</span>len;scan<span style="color:#f92672">&lt;</span>newsize;scan<span style="color:#f92672">++</span>) {
+</span></span><span style="display:flex;"><span>			...
+</span></span><span style="display:flex;"><span>		};
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>		<span style="color:#75715e">// len!=oldscore说明当前“候选”匹配区域不需要再继续向后搜索了；
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>		<span style="color:#75715e">// scan==newsize说明已经已到达文件尾；
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>		<span style="color:#75715e">// 符合这两个条件之一时，我们开始处理当前这个近似匹配区域；
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>		<span style="color:#66d9ef">if</span>((len<span style="color:#f92672">!=</span>oldscore) <span style="color:#f92672">||</span> (scan<span style="color:#f92672">==</span>newsize)) {
+</span></span><span style="display:flex;"><span>			<span style="color:#75715e">// 确定lenf的长度。区域[lastscan, lastscan+lenf)被称为forward extension
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>			s<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;Sf<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;lenf<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;
+</span></span><span style="display:flex;"><span>			<span style="color:#66d9ef">for</span>(i<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;(lastscan<span style="color:#f92672">+</span>i<span style="color:#f92672">&lt;</span>scan)<span style="color:#f92672">&amp;&amp;</span>(lastpos<span style="color:#f92672">+</span>i<span style="color:#f92672">&lt;</span>oldsize);) {
+</span></span><span style="display:flex;"><span>				...
+</span></span><span style="display:flex;"><span>			};
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>			<span style="color:#75715e">// 确定lenb的长度。区域[scan-lenb, scan)被称为backward extension
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>			lenb<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;
+</span></span><span style="display:flex;"><span>			<span style="color:#66d9ef">if</span>(scan<span style="color:#f92672">&lt;</span>newsize) {
+</span></span><span style="display:flex;"><span>				s<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;Sb<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;
+</span></span><span style="display:flex;"><span>				<span style="color:#66d9ef">for</span>(i<span style="color:#f92672">=</span><span style="color:#ae81ff">1</span>;(scan<span style="color:#f92672">&gt;=</span>lastscan<span style="color:#f92672">+</span>i)<span style="color:#f92672">&amp;&amp;</span>(pos<span style="color:#f92672">&gt;=</span>i);i<span style="color:#f92672">++</span>) {
+</span></span><span style="display:flex;"><span>					...
+</span></span><span style="display:flex;"><span>				};
+</span></span><span style="display:flex;"><span>			};
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>			<span style="color:#66d9ef">if</span>(lastscan<span style="color:#f92672">+</span>lenf<span style="color:#f92672">&gt;</span>scan<span style="color:#f92672">-</span>lenb) {
+</span></span><span style="display:flex;"><span>				<span style="color:#75715e">// forword extension和backward extension区域出现重叠时需要调整lenf和lenb
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>				...
+</span></span><span style="display:flex;"><span>			};
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>			<span style="color:#75715e">// forward extension即为diff区段，减去old中对应位置的值，结果写到db中
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>			<span style="color:#66d9ef">for</span>(i<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;i<span style="color:#f92672">&lt;</span>lenf;i<span style="color:#f92672">++</span>)
+</span></span><span style="display:flex;"><span>				db[dblen<span style="color:#f92672">+</span>i]<span style="color:#f92672">=</span>new[lastscan<span style="color:#f92672">+</span>i]<span style="color:#f92672">-</span>old[lastpos<span style="color:#f92672">+</span>i];
+</span></span><span style="display:flex;"><span>			<span style="color:#75715e">// forward extension和backward extension若不相连，两者中间的区域
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>			<span style="color:#75715e">// 即为extra区段，其内容直接复制到eb中
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>			<span style="color:#66d9ef">for</span>(i<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;i<span style="color:#f92672">&lt;</span>(scan<span style="color:#f92672">-</span>lenb)<span style="color:#f92672">-</span>(lastscan<span style="color:#f92672">+</span>lenf);i<span style="color:#f92672">++</span>)
+</span></span><span style="display:flex;"><span>				eb[eblen<span style="color:#f92672">+</span>i]<span style="color:#f92672">=</span>new[lastscan<span style="color:#f92672">+</span>lenf<span style="color:#f92672">+</span>i];
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>			dblen<span style="color:#f92672">+=</span>lenf;
+</span></span><span style="display:flex;"><span>			eblen<span style="color:#f92672">+=</span>(scan<span style="color:#f92672">-</span>lenb)<span style="color:#f92672">-</span>(lastscan<span style="color:#f92672">+</span>lenf);
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>			<span style="color:#75715e">// 写入三元组的x
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>			offtout(lenf,buf);
+</span></span><span style="display:flex;"><span>			...
+</span></span><span style="display:flex;"><span>			<span style="color:#75715e">// 写入三元组的y
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>			offtout((scan<span style="color:#f92672">-</span>lenb)<span style="color:#f92672">-</span>(lastscan<span style="color:#f92672">+</span>lenf),buf);
+</span></span><span style="display:flex;"><span>			...
+</span></span><span style="display:flex;"><span>			<span style="color:#75715e">// 写入三元组的z
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>			offtout((pos<span style="color:#f92672">-</span>lenb)<span style="color:#f92672">-</span>(lastpos<span style="color:#f92672">+</span>lenf),buf);
+</span></span><span style="display:flex;"><span>			...
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>			<span style="color:#75715e">// backward extension会被作为下一轮“候选”匹配区域的开始部分，
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>			<span style="color:#75715e">// 也就是变成下一次的forward extension的一部分
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>			lastscan<span style="color:#f92672">=</span>scan<span style="color:#f92672">-</span>lenb;
+</span></span><span style="display:flex;"><span>			lastpos<span style="color:#f92672">=</span>pos<span style="color:#f92672">-</span>lenb;
+</span></span><span style="display:flex;"><span>			lastoffset<span style="color:#f92672">=</span>pos<span style="color:#f92672">-</span>scan;
+</span></span><span style="display:flex;"><span>		};
+</span></span><span style="display:flex;"><span>	};
+</span></span></code></pre></div><p>细看下确定scan, len和oldscore的逻辑：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-c" data-lang="c"><span style="display:flex;"><span>		<span style="color:#75715e">// 当前“候选”匹配区域为：new[lastscan, scan) &lt;-&gt; old[lastpos, scan+lastoffset)
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>
+</span></span><span style="display:flex;"><span>		<span style="color:#75715e">// 重置oldscore
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>		oldscore<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>		<span style="color:#75715e">// 注意scan值变动的方式：进入循环时(+=len)，之后每执行完一次时(++)；
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>		<span style="color:#66d9ef">for</span>(scsc<span style="color:#f92672">=</span>scan<span style="color:#f92672">+=</span>len;scan<span style="color:#f92672">&lt;</span>newsize;scan<span style="color:#f92672">++</span>) {
+</span></span><span style="display:flex;"><span>			<span style="color:#75715e">// 这里对new中scan处开始的内容，在old中搜索一个完全匹配区域。
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>			<span style="color:#75715e">// len返回完全匹配区域的长度，pos为old中与scan所对应的位置。
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>			<span style="color:#75715e">// search函数是一个标准的二分查找算法，I是前面构建出来的后缀数组。
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>			len<span style="color:#f92672">=</span>search(I,old,oldsize,new<span style="color:#f92672">+</span>scan,newsize<span style="color:#f92672">-</span>scan,
+</span></span><span style="display:flex;"><span>					<span style="color:#ae81ff">0</span>,oldsize,<span style="color:#f92672">&amp;</span>pos);
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>			<span style="color:#75715e">// 上一步的搜索，得到了“候选”匹配区域new的向后延伸，在old中完全匹配区域的开始位置和长度，
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>			<span style="color:#75715e">//   但这个开始位置和“候选”匹配区域中old的结束位置有可能并不相连。
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>
+</span></span><span style="display:flex;"><span>			<span style="color:#75715e">// 统计new中[scan, scan+len)与old中“候选”匹配区域的对应延伸区段中相等的字节数，
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>			<span style="color:#75715e">// 累加到oldscore中。注意循环变量是scsc，因此不会重复累加。
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>			<span style="color:#66d9ef">for</span>(;scsc<span style="color:#f92672">&lt;</span>scan<span style="color:#f92672">+</span>len;scsc<span style="color:#f92672">++</span>)
+</span></span><span style="display:flex;"><span>			<span style="color:#66d9ef">if</span>((scsc<span style="color:#f92672">+</span>lastoffset<span style="color:#f92672">&lt;</span>oldsize) <span style="color:#f92672">&amp;&amp;</span>
+</span></span><span style="display:flex;"><span>				(old[scsc<span style="color:#f92672">+</span>lastoffset] <span style="color:#f92672">==</span> new[scsc]))
+</span></span><span style="display:flex;"><span>				oldscore<span style="color:#f92672">++</span>;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>			<span style="color:#75715e">// (len==oldscore) &amp;&amp; (len!=0) 说明当前“候选”区域的延伸区域仍然匹配的很好，
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>			<span style="color:#75715e">//   那么可以扩展“候选”匹配区域，并继续向后搜索；
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>			<span style="color:#75715e">// (len&gt;oldscore+8) 说明延伸区域中至少有8个以上的字节是不匹配的，
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>			<span style="color:#75715e">//   那么当前“候选”区域应该到此截止而不扩展；
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>			<span style="color:#66d9ef">if</span>(((len<span style="color:#f92672">==</span>oldscore) <span style="color:#f92672">&amp;&amp;</span> (len<span style="color:#f92672">!=</span><span style="color:#ae81ff">0</span>)) <span style="color:#f92672">||</span> 
+</span></span><span style="display:flex;"><span>				(len<span style="color:#f92672">&gt;</span>oldscore<span style="color:#f92672">+</span><span style="color:#ae81ff">8</span>)) <span style="color:#66d9ef">break</span>;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>			<span style="color:#75715e">// 走到这里说明当前不相等的字节数没有大于8，需要继续循环。
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>			<span style="color:#75715e">// 由于下次循环是从scan+1的位置上尝试，因此若scan对应的字节是相等的，
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>			<span style="color:#75715e">// 它已经被计算在oldscore之内的值需要被减掉。
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>			<span style="color:#66d9ef">if</span>((scan<span style="color:#f92672">+</span>lastoffset<span style="color:#f92672">&lt;</span>oldsize) <span style="color:#f92672">&amp;&amp;</span>
+</span></span><span style="display:flex;"><span>				(old[scan<span style="color:#f92672">+</span>lastoffset] <span style="color:#f92672">==</span> new[scan]))
+</span></span><span style="display:flex;"><span>				oldscore<span style="color:#f92672">--</span>;
+</span></span><span style="display:flex;"><span>		};
+</span></span></code></pre></div><p>再看一下确定lenf长度部分的逻辑，后面的lenb，以及lenf和lenb重叠时的处理，逻辑类似：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-c" data-lang="c"><span style="display:flex;"><span>			s<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;Sf<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;lenf<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;
+</span></span><span style="display:flex;"><span>			<span style="color:#75715e">// 从lastscan开始向后搜索，上界为scan
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>			<span style="color:#66d9ef">for</span>(i<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>;(lastscan<span style="color:#f92672">+</span>i<span style="color:#f92672">&lt;</span>scan)<span style="color:#f92672">&amp;&amp;</span>(lastpos<span style="color:#f92672">+</span>i<span style="color:#f92672">&lt;</span>oldsize);) {
+</span></span><span style="display:flex;"><span>				<span style="color:#75715e">// s记录对应字节相等的次数
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>				<span style="color:#66d9ef">if</span>(old[lastpos<span style="color:#f92672">+</span>i]<span style="color:#f92672">==</span>new[lastscan<span style="color:#f92672">+</span>i]) s<span style="color:#f92672">++</span>;
+</span></span><span style="display:flex;"><span>				i<span style="color:#f92672">++</span>;
+</span></span><span style="display:flex;"><span>				<span style="color:#75715e">// Sf保存着lenf更新时对应的s，两者的初始值均为0，因此这个判断最开始
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>				<span style="color:#75715e">// 相当于if(s*2-i&gt;0)，也就是是否有50%以上的i对应的字节是相同的。
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>				<span style="color:#75715e">// 在lenf更新过1次以后，这个判断相当于比较当前相同比率是否比前一次候选
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>				<span style="color:#75715e">// lenf所对应的相同比率更高。
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>				<span style="color:#66d9ef">if</span>(s<span style="color:#f92672">*</span><span style="color:#ae81ff">2</span><span style="color:#f92672">-</span>i<span style="color:#f92672">&gt;</span>Sf<span style="color:#f92672">*</span><span style="color:#ae81ff">2</span><span style="color:#f92672">-</span>lenf) { Sf<span style="color:#f92672">=</span>s; lenf<span style="color:#f92672">=</span>i; };
+</span></span><span style="display:flex;"><span>			};
+</span></span></code></pre></div><p>简单总结：</p>
 <ol>
 <li>从一个空的“候选”匹配区域开始，基于new持续向后探查。当(a)探查到文件尾，或者(b)当前探查位置在old中存在一个长度为len的完全匹配，并且当前“候选”匹配区域向后扩展len字节的区域中存在大于8个字节的不匹配时，结束当前“候选”的探查并进行这一“近似匹配区段”的数据输出。否则就扩展当前“候选”区域并继续探查。</li>
 <li>输出某一处“近似匹配区域”时，从区域的开始处向后找一个长度lenf，以及从区域的结束位置向前找一个长度lenb。lenf和lenb的判断标准都是看对应字节相同的比率是否达到50%。当lenf区段和lenb区段重叠时，在重叠区域中搜寻一个位置，使得此“近似匹配区域”的字节相同个数最大化，以此作为lenf区域和lenb区域的边界。</li>
@@ -304,35 +304,35 @@
 <p>最后还存在一些安全性漏洞，例如CVE-2014-9862<sup id="fnref:8"><a href="#fn:8" class="footnote-ref" role="doc-noteref">8</a></sup>。</p>
 <p>感兴趣的同学可以看下这个仓库，针对上述问题做了一些改进：<a href="https://github.com/zhuyie/bsdiff">bsdiff</a></p>
 <h2 id="references">References</h2>
-<section class="footnotes" role="doc-endnotes">
+<div class="footnotes" role="doc-endnotes">
 <hr>
 <ol>
-<li id="fn:1" role="doc-endnote">
+<li id="fn:1">
 <p><a href="https://en.wikipedia.org/wiki/Delta_encoding">https://en.wikipedia.org/wiki/Delta_encoding</a>&#160;<a href="#fnref:1" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
-<li id="fn:2" role="doc-endnote">
+<li id="fn:2">
 <p><a href="https://source.android.com/devices/tech/ota/reduce_size">https://source.android.com/devices/tech/ota/reduce_size</a>&#160;<a href="#fnref:2" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
-<li id="fn:3" role="doc-endnote">
+<li id="fn:3">
 <p><a href="https://en.wikipedia.org/wiki/Signed_number_representations#Sign-and-magnitude_method">https://en.wikipedia.org/wiki/Signed_number_representations#Sign-and-magnitude_method</a>&#160;<a href="#fnref:3" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
-<li id="fn:4" role="doc-endnote">
+<li id="fn:4">
 <p><a href="https://betterexplained.com/articles/understanding-big-and-little-endian-byte-order/">https://betterexplained.com/articles/understanding-big-and-little-endian-byte-order/</a>&#160;<a href="#fnref:4" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
-<li id="fn:5" role="doc-endnote">
+<li id="fn:5">
 <p><a href="https://www.sourceware.org/bzip2/">https://www.sourceware.org/bzip2/</a>&#160;<a href="#fnref:5" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
-<li id="fn:6" role="doc-endnote">
+<li id="fn:6">
 <p><a href="https://en.wikipedia.org/wiki/Suffix_array">https://en.wikipedia.org/wiki/Suffix_array</a>&#160;<a href="#fnref:6" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
-<li id="fn:7" role="doc-endnote">
+<li id="fn:7">
 <p><a href="https://github.com/y-256/libdivsufsort">https://github.com/y-256/libdivsufsort</a>&#160;<a href="#fnref:7" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
-<li id="fn:8" role="doc-endnote">
+<li id="fn:8">
 <p><a href="https://security-tracker.debian.org/tracker/CVE-2014-9862">https://security-tracker.debian.org/tracker/CVE-2014-9862</a>&#160;<a href="#fnref:8" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
 </ol>
-</section>
+</div>
 
 		</section>
 
