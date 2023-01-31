@@ -7,7 +7,24 @@
     <generator>Hugo -- gohugo.io</generator>
     <language>en-us</language>
     <copyright>© zhuyie</copyright>
-    <lastBuildDate>Sat, 31 Dec 2022 09:20:52 +0800</lastBuildDate><atom:link href="https://zhuyie.github.io/posts/index.xml" rel="self" type="application/rss+xml" />
+    <lastBuildDate>Mon, 30 Jan 2023 22:15:36 +0800</lastBuildDate><atom:link href="https://zhuyie.github.io/posts/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>BLE蓝牙键盘在macOS/Windows双启动场景下的配对</title>
+      <link>https://zhuyie.github.io/posts/ble-paring-on-dualboot-macos-windows/</link>
+      <pubDate>Mon, 30 Jan 2023 22:15:36 +0800</pubDate>
+      
+      <guid>https://zhuyie.github.io/posts/ble-paring-on-dualboot-macos-windows/</guid>
+      <description>起因 最近两把老键盘陆续挂掉，于是先后入手了两把新的：NIZ宁芝的X87EC三模 和 Keydous的NJ81双模。用下来都还可以，特别是两把的产地都是本地海边小渔村，感觉就更亲切了。
+然而好景不长。我的电脑是 MacBookPro (16-inch, 2019)，平时主要用 macOS (Catalina 10.15.7)，偶尔会要切到 BootCamp 的 Windows 10 中做一些测试的事情。这两把键盘都支持3套蓝牙Profile，也就是可以保存3套蓝牙配对信息并快速切换连接。在macOS下我都使用键盘的BT1来配对使用；当reboot到Windows时，按我之前使用其它蓝牙外设（例如Logitech MX Master 3）的经验，我应该切换到BT2在Windows中再进行一次配对，然后就视当前启动的是哪个OS，就切到对应的Profile来连接使用即可。这套用法在两把新键盘这边卡壳了：当我在Windows下用BT2配对好正常使用后，再reboot回macOS，发现BT1已经无法连接；重新用BT1再进行一次配对，然后reboot到Windows，BT2也无法连接&amp;hellip; 也就是每次切换OS想用键盘都需要重新配对～～～
+简单分析一下。电脑是同一台，无论是哪一个OS，电脑端的BTADDR是不变的。蓝牙键盘与电脑配对，是一个协商通讯密钥的过程，每一次配对应该都会生成不同的密钥。这两把键盘在BT2配对后，会影响到BT1，可能是因为这两组配对中，对端的BTADDR相同。猜测键盘为了实现某些自动连接切换的功能，内部以REMOTE_BTADDR为Key进行配对数据的存储，因此后一次的配对（生成了新的密钥）会影响到前一次的配对。
+双启动场景蓝牙配对问题 能支持多套蓝牙配对的设备是近些年才多起来的，那么之前的老蓝牙设备在双启动场景下如何配对使用呢？搜索了一下，被这个问题困扰的人还真不少：
+Bluetooth Pairing on Dual Boot of Windows &amp;amp; Linux Mint/Ubuntu Pairing bluetooth devices (keyboard or mouse) in dual boot with Linux Ubuntu and Windows 10 解决方案：Win10和Linux双系统配对蓝牙设备 特别的，这一篇刚好讲的就是macOS和BootCamp的场景：macOS 与 BootCamp 双系统共用同一蓝牙设备指引。
+那么回到之前的问题，是不是我固定用BT1，然后按前述文章进行系统配置的调整，就能够愉快的玩耍了呢？
+仔细看了这几篇文章，简单小结一下：
+蓝牙设备与电脑配对时，会动态生成一组LinkKey用于后继的连接与通讯，这个数据会被保存在蓝牙设备的Device memory和电脑OS的配置文件/注册表中； Windows中的LinkKeys保存在注册表的HKLM\CurrentControlSet\Services\BTHPORT\Parameters\Keys\{PC_BTADDR}\下，以蓝牙设备的地址为Name。这个注册表路径的拥有者是SYSTEM账户，普通用户或Administrator用户是看不到的，但可以使用PsExec工具以SYSTEM账户身份启动regedit.exe来查看/修改； macOS的LinkKeys保存在配置文件/private/var/root/Library/Preferences/com.apple.bluetoothd.plist中，可以用sudo来操作； 将蓝牙设备先与OS1进行配对，然后切换到OS2再次配对，再将OS2中此蓝牙设备所对应的LinkKey数据提取出来（一段16进制数据），回到OS1，将对应LinkKey修改为所提取的值，重启； 完工！ 这么简单，那就动手吧。。。然而（总是会有个然而的）惊喜的发现，无论在macOS下还是Windows下，对应位置的LinkKeys中都没有发现这两把键盘对应的数据：
+~ sudo defaults read /private/var/root/Library/Preferences/com.apple.bluetoothd.plist { DaemonIDSPairedDevices = ( .</description>
+    </item>
+    
     <item>
       <title>Happy New Year</title>
       <link>https://zhuyie.github.io/posts/happy-new-year-2023/</link>

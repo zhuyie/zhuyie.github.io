@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html><head>
+	<meta charset="utf-8" />
+	<meta http-equiv="X-UA-Compatible" content="IE=edge"><title>BLE蓝牙键盘在macOS/Windows双启动场景下的配对 - zhuyie&#39;s blog</title><meta name="viewport" content="width=device-width, initial-scale=1">
+
+	<meta property="og:image" content=""/>
+	<meta property="og:title" content="BLE蓝牙键盘在macOS/Windows双启动场景下的配对" />
+<meta property="og:description" content="NIZ X87EC &amp; Keydous NJ81 与 MacBookPro 的双系统配对。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://zhuyie.github.io/posts/ble-paring-on-dualboot-macos-windows/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-01-30T22:15:36+08:00" />
+<meta property="article:modified_time" content="2023-01-30T22:15:36+08:00" />
+
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="BLE蓝牙键盘在macOS/Windows双启动场景下的配对"/>
+<meta name="twitter:description" content="NIZ X87EC &amp; Keydous NJ81 与 MacBookPro 的双系统配对。"/>
+<script src="https://zhuyie.github.io/js/feather.min.js"></script>
+	
+	<link href="https://zhuyie.github.io/css/fonts.css" rel="stylesheet">
+	
+	<link rel="stylesheet" type="text/css" media="screen" href="https://zhuyie.github.io/css/main.css" /><link rel="stylesheet" type="text/css" href="https://zhuyie.github.io/css/dark.css" media="(prefers-color-scheme: dark)" />
+	
+	
+</head>
+<body>
+        <div class="content"><header>
+	<div class="main">
+		<a href="https://zhuyie.github.io/">zhuyie&#39;s blog</a>
+	</div>
+	<nav>
+		
+		<a href="/">Home</a>
+		
+		<a href="/posts">All posts</a>
+		
+	</nav>
+</header>
+
+<main>
+	<article>
+		<div class="title">
+			<h1 class="title">BLE蓝牙键盘在macOS/Windows双启动场景下的配对</h1>
+			<div class="meta">Posted on Jan 30, 2023</div>
+		</div>
+		
+
+		<section class="body">
+			<h2 id="起因">起因</h2>
+<p>最近两把老键盘陆续挂掉，于是先后入手了两把新的：<strong>NIZ宁芝的X87EC三模</strong> 和 <strong>Keydous的NJ81双模</strong>。用下来都还可以，特别是两把的产地都是本地海边小渔村，感觉就更亲切了。</p>
+<p>然而<strong>好景不长</strong>。我的电脑是 MacBookPro (16-inch, 2019)，平时主要用 macOS (Catalina 10.15.7)，偶尔会要切到 BootCamp 的 Windows 10 中做一些测试的事情。这两把键盘都支持3套蓝牙Profile，也就是可以保存3套蓝牙配对信息并快速切换连接。在macOS下我都使用键盘的BT1来配对使用；当reboot到Windows时，按我之前使用其它蓝牙外设（例如Logitech MX Master 3）的经验，我应该切换到BT2在Windows中再进行一次配对，然后就视当前启动的是哪个OS，就切到对应的Profile来连接使用即可。这套用法在两把新键盘这边卡壳了：<strong>当我在Windows下用BT2配对好正常使用后，再reboot回macOS，发现BT1已经无法连接；重新用BT1再进行一次配对，然后reboot到Windows，BT2也无法连接&hellip;</strong> 也就是每次切换OS想用键盘都需要重新配对～～～</p>
+<p>简单分析一下。电脑是同一台，无论是哪一个OS，电脑端的BTADDR是不变的。蓝牙键盘与电脑配对，是一个<strong>协商通讯密钥</strong>的过程，每一次配对应该都会生成不同的密钥。这两把键盘在BT2配对后，会影响到BT1，可能是因为这两组配对中，对端的BTADDR相同。猜测<strong>键盘为了实现某些自动连接切换的功能，内部以REMOTE_BTADDR为Key进行配对数据的存储，因此后一次的配对（生成了新的密钥）会影响到前一次的配对</strong>。</p>
+<h2 id="双启动场景蓝牙配对问题">双启动场景蓝牙配对问题</h2>
+<p>能支持多套蓝牙配对的设备是近些年才多起来的，那么之前的老蓝牙设备在双启动场景下如何配对使用呢？搜索了一下，被这个问题困扰的人还真不少：</p>
+<ul>
+<li><a href="https://unix.stackexchange.com/questions/255509/bluetooth-pairing-on-dual-boot-of-windows-linux-mint-ubuntu-stop-having-to-p">Bluetooth Pairing on Dual Boot of Windows &amp; Linux Mint/Ubuntu</a></li>
+<li><a href="https://gist.github.com/madkoding/f3cfd3742546d5c99131fd19ca267fd4">Pairing bluetooth devices (keyboard or mouse) in dual boot with Linux Ubuntu and Windows 10</a></li>
+<li><a href="https://blog.csdn.net/jiaolu295/article/details/105821487">解决方案：Win10和Linux双系统配对蓝牙设备</a></li>
+</ul>
+<p>特别的，这一篇刚好讲的就是macOS和BootCamp的场景：<a href="https://xavier.wang/105-macos-bc-bluetooth/">macOS 与 BootCamp 双系统共用同一蓝牙设备指引</a>。</p>
+<p>那么回到之前的问题，<strong>是不是我固定用BT1，然后按前述文章进行系统配置的调整，就能够愉快的玩耍了呢？</strong></p>
+<p>仔细看了这几篇文章，简单小结一下：</p>
+<ol>
+<li>蓝牙设备与电脑配对时，会动态生成一组<code>LinkKey</code>用于后继的连接与通讯，这个数据会被保存在蓝牙设备的Device memory和电脑OS的配置文件/注册表中；</li>
+<li>Windows中的LinkKeys保存在注册表的<code>HKLM\CurrentControlSet\Services\BTHPORT\Parameters\Keys\{PC_BTADDR}\</code>下，以蓝牙设备的地址为Name。这个注册表路径的拥有者是SYSTEM账户，普通用户或Administrator用户是看不到的，但可以使用<a href="https://learn.microsoft.com/zh-cn/sysinternals/downloads/psexec">PsExec工具</a>以SYSTEM账户身份启动regedit.exe来查看/修改；</li>
+<li>macOS的LinkKeys保存在配置文件<code>/private/var/root/Library/Preferences/com.apple.bluetoothd.plist</code>中，可以用sudo来操作；</li>
+<li>将蓝牙设备先与OS1进行配对，然后切换到OS2再次配对，再将OS2中此蓝牙设备所对应的LinkKey数据提取出来（一段16进制数据），回到OS1，将对应LinkKey修改为所提取的值，重启；</li>
+<li>完工！</li>
+</ol>
+<p>这么简单，那就动手吧。。。然而（总是会有个然而的）惊喜的发现，无论在macOS下还是Windows下，对应位置的LinkKeys中都没有发现这两把键盘对应的数据：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-c" data-lang="c"><span style="display:flex;"><span><span style="color:#f92672">~</span> sudo defaults read <span style="color:#f92672">/</span>private<span style="color:#f92672">/</span>var<span style="color:#f92672">/</span>root<span style="color:#f92672">/</span>Library<span style="color:#f92672">/</span>Preferences<span style="color:#f92672">/</span>com.apple.bluetoothd.plist
+</span></span><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>    DaemonIDSPairedDevices <span style="color:#f92672">=</span>     (
+</span></span><span style="display:flex;"><span>    ...
+</span></span><span style="display:flex;"><span>    );
+</span></span><span style="display:flex;"><span>    LinkKeys <span style="color:#f92672">=</span>     {
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;f8-ff-c2-11-7b-48&#34;</span> <span style="color:#f92672">=</span>         {
+</span></span><span style="display:flex;"><span>            <span style="color:#75715e">// 蓝牙耳机1
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>            <span style="color:#e6db74">&#34;40-ed-98-18-1a-0e&#34;</span> <span style="color:#f92672">=</span> {length <span style="color:#f92672">=</span> <span style="color:#ae81ff">16</span>, bytes <span style="color:#f92672">=</span> <span style="color:#ae81ff">0xae19dc9d31d5c191f8bbf41156237e1e</span>};
+</span></span><span style="display:flex;"><span>            <span style="color:#75715e">// 蓝牙耳机2
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>            <span style="color:#e6db74">&#34;48-d8-45-21-5a-06&#34;</span> <span style="color:#f92672">=</span> {length <span style="color:#f92672">=</span> <span style="color:#ae81ff">16</span>, bytes <span style="color:#f92672">=</span> <span style="color:#ae81ff">0x1caca400190ad53d083a746c746dd39f</span>};
+</span></span><span style="display:flex;"><span>        };
+</span></span><span style="display:flex;"><span>    };
+</span></span><span style="display:flex;"><span>    ...
+</span></span><span style="display:flex;"><span>    SMPDistributionKeys <span style="color:#f92672">=</span>     {
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;f8-ff-c2-11-7b-48&#34;</span> <span style="color:#f92672">=</span>         {
+</span></span><span style="display:flex;"><span>            ...
+</span></span><span style="display:flex;"><span>            <span style="color:#e6db74">&#34;d8-55-68-45-f2-8f&#34;</span> <span style="color:#f92672">=</span>             {  <span style="color:#75715e">// NIZ
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>                EDIV <span style="color:#f92672">=</span> {length <span style="color:#f92672">=</span> <span style="color:#ae81ff">2</span>, bytes <span style="color:#f92672">=</span> <span style="color:#ae81ff">0x8311</span>};
+</span></span><span style="display:flex;"><span>                LTK <span style="color:#f92672">=</span> {length <span style="color:#f92672">=</span> <span style="color:#ae81ff">16</span>, bytes <span style="color:#f92672">=</span> <span style="color:#ae81ff">0xff47efec32f655fd21b566f59229629a</span>};
+</span></span><span style="display:flex;"><span>                LTKLength <span style="color:#f92672">=</span> {length <span style="color:#f92672">=</span> <span style="color:#ae81ff">1</span>, bytes <span style="color:#f92672">=</span> <span style="color:#ae81ff">0x10</span>};
+</span></span><span style="display:flex;"><span>                LocalEDIV <span style="color:#f92672">=</span> {length <span style="color:#f92672">=</span> <span style="color:#ae81ff">2</span>, bytes <span style="color:#f92672">=</span> <span style="color:#ae81ff">0x2f2e</span>};
+</span></span><span style="display:flex;"><span>                LocalLTK <span style="color:#f92672">=</span> {length <span style="color:#f92672">=</span> <span style="color:#ae81ff">16</span>, bytes <span style="color:#f92672">=</span> <span style="color:#ae81ff">0x9df745c1b4c02a7615283952aaa743a9</span>};
+</span></span><span style="display:flex;"><span>                LocalLTKLength <span style="color:#f92672">=</span> {length <span style="color:#f92672">=</span> <span style="color:#ae81ff">1</span>, bytes <span style="color:#f92672">=</span> <span style="color:#ae81ff">0x10</span>};
+</span></span><span style="display:flex;"><span>                LocalRAND <span style="color:#f92672">=</span> {length <span style="color:#f92672">=</span> <span style="color:#ae81ff">8</span>, bytes <span style="color:#f92672">=</span> <span style="color:#ae81ff">0xee7fd5113ca1000b</span>};
+</span></span><span style="display:flex;"><span>                MITMProtection <span style="color:#f92672">=</span> <span style="color:#ae81ff">1</span>;
+</span></span><span style="display:flex;"><span>                OriginalAddressType <span style="color:#f92672">=</span> <span style="color:#ae81ff">1</span>;
+</span></span><span style="display:flex;"><span>                RAND <span style="color:#f92672">=</span> {length <span style="color:#f92672">=</span> <span style="color:#ae81ff">8</span>, bytes <span style="color:#f92672">=</span> <span style="color:#ae81ff">0x5db7379e20a85841</span>};
+</span></span><span style="display:flex;"><span>            };
+</span></span><span style="display:flex;"><span>            <span style="color:#e6db74">&#34;dc-e7-4e-b7-87-a3&#34;</span> <span style="color:#f92672">=</span>             {  <span style="color:#75715e">// Keydous
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>                Address <span style="color:#f92672">=</span> {length <span style="color:#f92672">=</span> <span style="color:#ae81ff">6</span>, bytes <span style="color:#f92672">=</span> <span style="color:#ae81ff">0xdce74eb787a3</span>};
+</span></span><span style="display:flex;"><span>                AddressType <span style="color:#f92672">=</span> <span style="color:#ae81ff">1</span>;
+</span></span><span style="display:flex;"><span>                EDIV <span style="color:#f92672">=</span> {length <span style="color:#f92672">=</span> <span style="color:#ae81ff">2</span>, bytes <span style="color:#f92672">=</span> <span style="color:#ae81ff">0x2775</span>};
+</span></span><span style="display:flex;"><span>                IRK <span style="color:#f92672">=</span> {length <span style="color:#f92672">=</span> <span style="color:#ae81ff">16</span>, bytes <span style="color:#f92672">=</span> <span style="color:#ae81ff">0xc462bdac49bd3ba83413d7275b6c907b</span>};
+</span></span><span style="display:flex;"><span>                LTK <span style="color:#f92672">=</span> {length <span style="color:#f92672">=</span> <span style="color:#ae81ff">16</span>, bytes <span style="color:#f92672">=</span> <span style="color:#ae81ff">0x643c1ac0f28aba9c172712d07989bdcd</span>};
+</span></span><span style="display:flex;"><span>                LTKLength <span style="color:#f92672">=</span> {length <span style="color:#f92672">=</span> <span style="color:#ae81ff">1</span>, bytes <span style="color:#f92672">=</span> <span style="color:#ae81ff">0x10</span>};
+</span></span><span style="display:flex;"><span>                LocalEDIV <span style="color:#f92672">=</span> {length <span style="color:#f92672">=</span> <span style="color:#ae81ff">2</span>, bytes <span style="color:#f92672">=</span> <span style="color:#ae81ff">0xfdc0</span>};
+</span></span><span style="display:flex;"><span>                LocalLTK <span style="color:#f92672">=</span> {length <span style="color:#f92672">=</span> <span style="color:#ae81ff">16</span>, bytes <span style="color:#f92672">=</span> <span style="color:#ae81ff">0x49b1071161884e1cf197d070bfd59c57</span>};
+</span></span><span style="display:flex;"><span>                LocalLTKLength <span style="color:#f92672">=</span> {length <span style="color:#f92672">=</span> <span style="color:#ae81ff">1</span>, bytes <span style="color:#f92672">=</span> <span style="color:#ae81ff">0x10</span>};
+</span></span><span style="display:flex;"><span>                LocalRAND <span style="color:#f92672">=</span> {length <span style="color:#f92672">=</span> <span style="color:#ae81ff">8</span>, bytes <span style="color:#f92672">=</span> <span style="color:#ae81ff">0x499b792c837eba4d</span>};
+</span></span><span style="display:flex;"><span>                MITMProtection <span style="color:#f92672">=</span> <span style="color:#ae81ff">1</span>;
+</span></span><span style="display:flex;"><span>                OriginalAddressType <span style="color:#f92672">=</span> <span style="color:#ae81ff">1</span>;
+</span></span><span style="display:flex;"><span>                RAND <span style="color:#f92672">=</span> {length <span style="color:#f92672">=</span> <span style="color:#ae81ff">8</span>, bytes <span style="color:#f92672">=</span> <span style="color:#ae81ff">0x23c17164bf0de0fb</span>};
+</span></span><span style="display:flex;"><span>            };
+</span></span><span style="display:flex;"><span>            ...
+</span></span></code></pre></div><p>啥情况？对应的LinkKey不存在，反而在SMPDistributionKeys下有一堆数据。这些EDIV, IRK, LTK, RAND又是什么鬼？</p>
+<p>继续爬文&hellip;</p>
+<p>原来LinkKey是老版本蓝牙设备（例如我的蓝牙耳机）所使用的，<strong>Bluetooth LE设备，会使用新的密钥分发机制</strong>。这篇文章<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup>对BLE的安全连接流程有个概要性的描述，而这一篇<sup id="fnref:2"><a href="#fn:2" class="footnote-ref" role="doc-noteref">2</a></sup>中有对上述术语的具体解释：</p>
+<ul>
+<li>Identity Resolving Key (IRK): 128-bit key used to generate and resolve random address.</li>
+<li>Connection Signature Resolving Key (CSRK): 128-bit key used to sign data and verify signatures on the receiving device.</li>
+<li>Long Term Key (LTK): 128-bit key used to generate the session key for an encrypted connection.</li>
+<li>Encrypted Diversifier (EDIV): 16-bit stored value used to identify the LTK. A new EDIV is generated each time a new LTK is distributed.</li>
+<li>Random Number (RAND): 64-bit stored value used to identify the LTK. A new RAND is generated each time a unique LTK is distributed.</li>
+</ul>
+<p>从实际用途来说，<strong>LTK类似于之前的LinkKey</strong>，LTK/EDIV/RAND这三者的关系，在这一篇<sup id="fnref:3"><a href="#fn:3" class="footnote-ref" role="doc-noteref">3</a></sup>中有说明。</p>
+<p>上面还出现了LocalLTK/LocalEDIV/LocalRAND，这些值在Windows的注册表中没有存储，看起来像是配对过程中本地生成的数据，可以先忽略。</p>
+<p>最后，找到了这个链接：<a href="https://github.com/digitalbirdo/BT-LinkkeySync/issues/12">How to fix BLE devices #12</a>，其中<code>foxevereg</code>的回答说的很详细。</p>
+<h2 id="实践">实践</h2>
+<p>理论基础准备的差不多了，那就实际开工吧。</p>
+<p>从原理上说，既可以选择将LTK/EDIV/RAND等从macOS同步到Windows，也可以从Windows同步到macOS。不过通过测试发现，NIZ这把键盘每配对一次，其BTADDR的最后一个字节会变化（一般是递增++），这样的话，还需要将BTADDR也进行同步的修改。通过搜索Windows注册表可知，有相当多的地方记录/引用了BTADDR。而在macOS中，只有两个plist文件中记录BTADDR，改动起来工作量小很多，不容易出错。因此，采用<strong>先在macOS中配对-&gt;切换到Windows中再次配对-&gt;从Windows注册表中提取数据-&gt;回到macOS中修改</strong>的方式。</p>
+<h3 id="niz-x87ec">NIZ X87EC</h3>
+<ol>
+<li>将它的BT1依次与macOS和Windows进行配对。</li>
+<li>在Windows中以管理员身份启动一个命令行窗口，用cd命令进入到提前下载/解压好的PsExec工具目录，执行：
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-fallback" data-lang="fallback"><span style="display:flex;"><span>psexec.exe -s -i regedit.exe
+</span></span></code></pre></div>这样就以SYSTEM账户身份启动了注册表编辑器。</li>
+<li>找到<code>HKLM\CurrentControlSet\Services\BTHPORT\Parameters\Keys\f8ffc2117b48\</code>，这里的f8ffc2117b48是我笔记本的蓝牙地址。在这下面找d8556845f2开头的key，只有一个，就是这把NIZ。将这个key导出为注册表文件，保存到C盘根目录：
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-fallback" data-lang="fallback"><span style="display:flex;"><span>Windows Registry Editor Version 5.00
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>[HKEY_LOCAL_MACHINE\SYSTEM\ControlSet001\Services\BTHPORT\Parameters\Keys\f8ffc2117b48\d8556845f290]
+</span></span><span style="display:flex;"><span>&#34;LTK&#34;=hex:68,19,78,48,fd,cb,eb,7a,46,dd,9d,65,87,79,b2,f7
+</span></span><span style="display:flex;"><span>&#34;KeyLength&#34;=dword:00000010
+</span></span><span style="display:flex;"><span>&#34;ERand&#34;=hex(b):db,5d,9e,37,20,a8,41,58
+</span></span><span style="display:flex;"><span>&#34;EDIV&#34;=dword:0000fc1e
+</span></span><span style="display:flex;"><span>&#34;MasterIRKStatus&#34;=dword:00000001
+</span></span><span style="display:flex;"><span>&#34;AuthReq&#34;=dword:0000002d
+</span></span></code></pre></div></li>
+<li>Reboot回到macOS，此时BT1是连接不上的。在Desktop上新建一个目录niz_bt，挂载BOOTCAMP分区，将上一步导出的注册表文件拷贝到这个目录。</li>
+<li>首先看一下两个蓝牙相关配置文件的权限设置和Owner，后面修改完需要改成同样的再覆盖回去：
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-fallback" data-lang="fallback"><span style="display:flex;"><span>➜  niz_bt sudo ls -al /private/var/root/Library/Preferences/com.apple.bluetoothd.plist
+</span></span><span style="display:flex;"><span>-rw-------  1 root  wheel  2767 Jan 29 20:19 /private/var/root/Library/Preferences/com.apple.bluetoothd.plist
+</span></span><span style="display:flex;"><span>➜  niz_bt sudo ls -al /Library/Preferences/com.apple.Bluetooth.plist
+</span></span><span style="display:flex;"><span>-rw-r--r--  1 root  wheel  64988 Jan 29 20:19 /Library/Preferences/com.apple.Bluetooth.plist
+</span></span></code></pre></div></li>
+<li>将两个配置文件复制到niz_bt目录，修改Owner为当前用户使得它们可以被编辑：
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-fallback" data-lang="fallback"><span style="display:flex;"><span>➜  niz_bt sudo cp /private/var/root/Library/Preferences/com.apple.bluetoothd.plist .
+</span></span><span style="display:flex;"><span>➜  niz_bt sudo cp /Library/Preferences/com.apple.Bluetooth.plist .
+</span></span><span style="display:flex;"><span>➜  niz_bt sudo chown zhuyie:staff com.apple.bluetoothd.plist
+</span></span><span style="display:flex;"><span>➜  niz_bt sudo chown zhuyie:staff com.apple.Bluetooth.plist
+</span></span><span style="display:flex;"><span>➜  niz_bt ls -al
+</span></span><span style="display:flex;"><span>total 160
+</span></span><span style="display:flex;"><span>drwxr-xr-x   6 zhuyie  staff    192 Jan 29 21:02 .
+</span></span><span style="display:flex;"><span>drwx------@ 12 zhuyie  staff    384 Jan 29 21:02 ..
+</span></span><span style="display:flex;"><span>-rw-r--r--   1 zhuyie  staff  64988 Jan 29 21:02 com.apple.Bluetooth.plist
+</span></span><span style="display:flex;"><span>-rw-------   1 zhuyie  staff   2767 Jan 29 21:02 com.apple.bluetoothd.plist
+</span></span><span style="display:flex;"><span>-rwxr-xr-x@  1 zhuyie  staff    710 Jan 29 21:01 niz.reg
+</span></span></code></pre></div></li>
+<li>首先修改com.apple.bluetoothd.plist，可以用Xcode直接编辑。需要修改的地方包括：蓝牙地址/LTK/EDIV/RAND。RAND对应到Windows注册表中的值名称是&quot;ERand&quot;，EDIV的值需要调转字节序，也就是由注册表中的<code>fc1e</code>改为plist中的<code>IEFC</code>：
+<img src="/images/ble-pairing-1.png" alt=""></li>
+<li>然后修改com.apple.Bluetooth.plist。用&quot;查找-替换&quot;的方式将所有原蓝牙地址修改为和Windows一致的新地址。</li>
+<li><strong>禁用蓝牙！！！</strong></li>
+<li>将修改后的plist文件的Owner恢复为原始状态，覆盖回原路径，重启系统：
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-fallback" data-lang="fallback"><span style="display:flex;"><span>➜  niz_bt sudo chown root:wheel com.apple.bluetoothd.plist
+</span></span><span style="display:flex;"><span>➜  niz_bt sudo chown root:wheel com.apple.Bluetooth.plist
+</span></span><span style="display:flex;"><span>➜  niz_bt sudo cp com.apple.bluetoothd.plist /private/var/root/Library/Preferences/com.apple.bluetoothd.plist
+</span></span><span style="display:flex;"><span>➜  niz_bt sudo cp com.apple.Bluetooth.plist /Library/Preferences/com.apple.Bluetooth.plist
+</span></span></code></pre></div></li>
+<li>重新启用蓝牙，此时NIZ应该可以连接上啦！reboot到Windows，仍然可以正常连接！</li>
+</ol>
+<h3 id="keydous-nj81">Keydous NJ81</h3>
+<ol>
+<li>Keydous就更简单一点，因为它多次配对时BTADDR不会变，因此就省去了修改com.apple.Bluetooth.plist的功夫。</li>
+<li>数据上Keydous这把会多出一个值<strong>LRK</strong>需要同步修改，而且这个值需要<strong>调转字节序</strong>：
+<img src="/images/ble-pairing-2.png" alt=""></li>
+<li>其它步骤和前面一致。</li>
+</ol>
+<h2 id="references">References</h2>
+<div class="footnotes" role="doc-endnotes">
+<hr>
+<ol>
+<li id="fn:1">
+<p><a href="https://medium.com/rtone-iot-security/deep-dive-into-bluetooth-le-security-d2301d640bfc">https://medium.com/rtone-iot-security/deep-dive-into-bluetooth-le-security-d2301d640bfc</a>&#160;<a href="#fnref:1" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+</li>
+<li id="fn:2">
+<p><a href="https://fte.com/webhelpii/bpa600/Content/Documentation/WhitePapers/BTLE/Pairing.htm">https://fte.com/webhelpii/bpa600/Content/Documentation/WhitePapers/BTLE/Pairing.htm</a>&#160;<a href="#fnref:2" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+</li>
+<li id="fn:3">
+<p><a href="https://stackoverflow.com/questions/48165520/need-details-about-ediv-and-rand">https://stackoverflow.com/questions/48165520/need-details-about-ediv-and-rand</a>&#160;<a href="#fnref:3" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+</li>
+</ol>
+</div>
+
+		</section>
+
+		<div class="post-tags">
+			
+			
+			
+		</div>
+	</article>
+</main>
+<footer>
+<hr><a class="soc" href="https://github.com/zhuyie" title="GitHub"><i data-feather="github"></i></a>|⚡️
+	2023  © zhuyie |  <a href="https://github.com/athul/archie">Archie Theme</a> | Built with <a href="https://gohugo.io">Hugo</a>
+</footer>
+
+
+<script type="application/javascript">
+var doNotTrack = false;
+if (!doNotTrack) {
+	window.ga=window.ga||function(){(ga.q=ga.q||[]).push(arguments)};ga.l=+new Date;
+	ga('create', 'UA-195056302-1', 'auto');
+	
+	ga('send', 'pageview');
+}
+</script>
+<script async src='https://www.google-analytics.com/analytics.js'></script>
+
+<script>
+      feather.replace()
+</script></div>
+    </body>
+</html>
