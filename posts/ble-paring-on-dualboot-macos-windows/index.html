@@ -114,7 +114,7 @@
 </span></span><span style="display:flex;"><span>            ...
 </span></span></code></pre></div><p>啥情况？对应的LinkKey不存在，反而在SMPDistributionKeys下有一堆数据。这些EDIV, IRK, LTK, RAND又是什么鬼？</p>
 <p>继续爬文&hellip;</p>
-<p>原来LinkKey是老版本蓝牙设备（例如我的蓝牙耳机）所使用的，<strong>Bluetooth LE设备，会使用新的密钥分发机制</strong>。因为涉及到硬件和通讯，要理解细节是有难度的，但为了解决这个问题去通读Speciation<sup id="fnref:3"><a href="#fn:3" class="footnote-ref" role="doc-noteref">3</a></sup>应该也是没必要。这篇文章<sup id="fnref:4"><a href="#fn:4" class="footnote-ref" role="doc-noteref">4</a></sup>对BLE的安全连接流程有个概要性的描述，而这一篇<sup id="fnref:5"><a href="#fn:5" class="footnote-ref" role="doc-noteref">5</a></sup>中有对上述术语的具体解释：</p>
+<p>原来LinkKey是老版本蓝牙设备（例如我的蓝牙耳机）所使用的，<strong>Bluetooth LE设备，会使用新的密钥分发机制</strong>。因为涉及到硬件和通讯，要理解细节是有难度的，但为了解决这个问题去通读Specification<sup id="fnref:3"><a href="#fn:3" class="footnote-ref" role="doc-noteref">3</a></sup>应该也是没必要。这篇文章<sup id="fnref:4"><a href="#fn:4" class="footnote-ref" role="doc-noteref">4</a></sup>对BLE的安全连接流程有个概要性的描述，而这一篇<sup id="fnref:5"><a href="#fn:5" class="footnote-ref" role="doc-noteref">5</a></sup>中有对上述术语的具体解释：</p>
 <ul>
 <li>Identity Resolving Key (IRK): 128-bit key used to generate and resolve random address.</li>
 <li>Connection Signature Resolving Key (CSRK): 128-bit key used to sign data and verify signatures on the receiving device.</li>
