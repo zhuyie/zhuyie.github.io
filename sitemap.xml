@@ -2,13 +2,16 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
   xmlns:xhtml="http://www.w3.org/1999/xhtml">
   <url>
-    <loc>https://zhuyie.github.io/posts/ble-paring-on-dualboot-macos-windows/</loc>
-    <lastmod>2023-01-30T22:15:36+08:00</lastmod>
+    <loc>https://zhuyie.github.io/posts/goodbye-2023/</loc>
+    <lastmod>2023-12-31T11:18:47+08:00</lastmod>
   </url><url>
     <loc>https://zhuyie.github.io/posts/</loc>
-    <lastmod>2023-01-30T22:15:36+08:00</lastmod>
+    <lastmod>2023-12-31T11:18:47+08:00</lastmod>
   </url><url>
     <loc>https://zhuyie.github.io/</loc>
+    <lastmod>2023-12-31T11:18:47+08:00</lastmod>
+  </url><url>
+    <loc>https://zhuyie.github.io/posts/ble-paring-on-dualboot-macos-windows/</loc>
     <lastmod>2023-01-30T22:15:36+08:00</lastmod>
   </url><url>
     <loc>https://zhuyie.github.io/posts/happy-new-year-2023/</loc>
