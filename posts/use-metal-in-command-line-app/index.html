@@ -11,8 +11,7 @@
 <meta property="article:published_time" content="2021-04-19T21:20:23+08:00" />
 <meta property="article:modified_time" content="2021-04-19T21:20:23+08:00" />
 
-<meta name="twitter:card" content="summary"/>
-<meta name="twitter:title" content="在MacOS命令行程序中使用Metal"/>
+<meta name="twitter:card" content="summary"/><meta name="twitter:title" content="在MacOS命令行程序中使用Metal"/>
 <meta name="twitter:description" content="在command line app中使用Metal的小坑。"/>
 <script src="https://zhuyie.github.io/js/feather.min.js"></script>
 	
@@ -74,8 +73,8 @@
 <p>此处省略一万字。</p>
 <h2 id="结果">结果</h2>
 <p>最后，在<a href="https://developer.apple.com/documentation/metal/1433401-mtlcreatesystemdefaultdevice">MTLCreateSystemDefaultDevice</a>的说明文档上看到这么一段：</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-fallback" data-lang="fallback"><span style="display:flex;"><span>In macOS, in order for the system to provide a default Metal device object, you must link to the CoreGraphics framework. 
-</span></span><span style="display:flex;"><span>You usually need to do this explicitly if you are writing apps that don&#39;t use graphics by default, such as command line tools.
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-gdscript3" data-lang="gdscript3"><span style="display:flex;"><span>In macOS, <span style="color:#f92672">in</span> order <span style="color:#66d9ef">for</span> the system to provide a default Metal device object, you must link to the CoreGraphics framework<span style="color:#f92672">.</span> 
+</span></span><span style="display:flex;"><span>You usually need to <span style="color:#66d9ef">do</span> this explicitly <span style="color:#66d9ef">if</span> you are writing apps that don<span style="color:#e6db74">&#39;t use graphics by default, such as command line tools.</span>
 </span></span></code></pre></div><p>在CMakeLists.txt中加上<code>target_link_libraries(target_name ... &quot;-framework CoreGraphics&quot;)</code>再试，世界和平了。</p>
 
 		</section>
@@ -93,7 +92,7 @@
 </footer>
 
 
-<script type="application/javascript">
+<script>
 var doNotTrack = false;
 if (!doNotTrack) {
 	window.ga=window.ga||function(){(ga.q=ga.q||[]).push(arguments)};ga.l=+new Date;

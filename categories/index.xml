@@ -6,6 +6,7 @@
     <description>Recent content in Categories on zhuyie&#39;s blog</description>
     <generator>Hugo -- gohugo.io</generator>
     <language>en-us</language>
-    <copyright>© zhuyie</copyright><atom:link href="https://zhuyie.github.io/categories/index.xml" rel="self" type="application/rss+xml" />
+    <copyright>© zhuyie</copyright>
+    <atom:link href="https://zhuyie.github.io/categories/index.xml" rel="self" type="application/rss+xml" />
   </channel>
 </rss>
