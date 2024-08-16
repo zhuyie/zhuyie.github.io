@@ -4,7 +4,7 @@
     <title>Posts on zhuyie&#39;s blog</title>
     <link>https://zhuyie.github.io/posts/</link>
     <description>Recent content in Posts on zhuyie&#39;s blog</description>
-    <generator>Hugo -- gohugo.io</generator>
+    <generator>Hugo</generator>
     <language>en-us</language>
     <copyright>© zhuyie</copyright>
     <lastBuildDate>Sun, 31 Dec 2023 11:18:47 +0800</lastBuildDate>
@@ -14,7 +14,7 @@
       <link>https://zhuyie.github.io/posts/goodbye-2023/</link>
       <pubDate>Sun, 31 Dec 2023 11:18:47 +0800</pubDate>
       <guid>https://zhuyie.github.io/posts/goodbye-2023/</guid>
-      <description> </description>
+      <description>🎆🎇🌇</description>
     </item>
     <item>
       <title>BLE蓝牙键盘在macOS/Windows双启动场景下的配对</title>
@@ -42,7 +42,7 @@
       <link>https://zhuyie.github.io/posts/binary-to-text-encoding/</link>
       <pubDate>Mon, 09 Aug 2021 09:56:58 +0800</pubDate>
       <guid>https://zhuyie.github.io/posts/binary-to-text-encoding/</guid>
-      <description>起因 最近在看ImGui的代码，其中有个将字体数据嵌入到源码的写法1引起了我的注意，它采用了一种之前没接触过的编码方式：Base85。从这里开始，对相关的领域进行了一次简单的梳理。&#xA;什么是Binary-to-text编码2？ 顾名思义，Binary-to-text编码是一种将二进制数据转换为文本形式的编码方式。更精确的说，它是一种将二进制数据转换为由 “可打印字符” 组成的文本流形式的编码方式。&#xA;为什么要存在这个东西？主要是为了解决如下两类问题：&#xA;某些传输信道或介质不支持二进制数据，例如E-Mail或NNTP； 某些传输信道或介质不能正确的处理8-bit字符编码（或者说：not 8-bit clean）； 看下这个编码的两端，一边是二进制数据，一边是文本。&#xA;二进制数据，大家通常的理解是一个字节流，同时每1个字节由8个比特组成。稍微延伸一下，Quora上这个问题比较详细的解释了Why is one byte formed by 8 bits?&#xA;文本，在这个上下文中，特指的是ASCII编码中的printable characters。ASCII编码是一个7-bit的编码，最多可表示128个唯一字符。其中控制字符33个（0x0-0x1F, 0x7F），可打印字符95个（0x20-0x7E）。&#xA;一个重要的问题是，在现代二进制计算机中，文本（或字符）在实现上也是基于字节来存储，也就是虽然单个ASCII字符只需要用7-bit来描述，在具体实现中1个ASCII字符会被存储为1个字节，也即占用8-bit。换句话说，从信息编码效率来看，以字节形式存储的文本，编码效率最高不会超过87.5% (7/8)，并随着编码中所实际使用的唯一字符数的降低而进一步降低。与之对应的，Binary-to-text编码的效率通常也会低于1，也就是编码后的文本串所占用的字节数通常要大于原始二进制数据所占的字节数。&#xA;回到ImGui将字体嵌入源码的情况：字体文件是二进制数据，而C++源码中的string literal当然无法支持二进制数据，因此这里使用了Base85将二进制数据编码为文本流，再嵌入到源码中。&#xA;Base16 Base16或者说是hexadecimal，应该是程序员们最熟悉的一种Binary-to-text编码了。其文本中的单个字符具有16种唯一值，能表示4-bit的信息（2^4 = 16），因此一个8-bit的字节刚好可以用两个字符来表示，编码效率为50%。&#xA;对应到文本字符的选择上，理论上可以从可打印字符中任意挑选16个来表示，Base16实际选择了最容易理解的0, 1, 2, &amp;hellip;, 9, a, b, c, d, e, f这16个字符来分别表示0 ~ 15，其中这6个字母大小写不敏感。&#xA;看个例子，开发人员常用的HexViewer类工具，是一种典型的Base16转换场景。例如用HexViewer打开一个.zip文件，可以看到其前4个字节的Magic word为：&amp;ldquo;PK␃␄&amp;rdquo;: Base64 Base64应该是使用最多的Binary-to-text编码，被广泛用于互联网环境，例如在HTML/CSS中嵌入二进制数据，在E-Mail消息中编码二进制附件文件等。其文本中的单个字符具有64种唯一值，能表示6-bit的信息（2^6 = 64），因此3个字节的二进制数据（3 x 8-bit）刚好可以用4个字符来表示（4 x 6-bit），编码效率为75%。&#xA;Why 64? 主要原因是：&#xA;Base为2的n次幂时，方便进行Base 2到Base 2^n的转换（n个bit为一组进行转换即可）； ASCII中共有95个可打印字符，而64是&amp;lt;=95的数中最大的2的n次幂数； 在文本字符子集的选择上，Base64稍有不同：大写字母A~Z表示0~25，小写字母a~z表示26~51，数字0~9表示52~61，+表示62，/表示63。此外，=字符用于将编码后文本长度padding到4的倍数。 网上有简易的Base64编码在线转换工具3，我们来看个例子： 输入文本中的前3个字节为&amp;quot;Hel&amp;quot;，对应的二进制为：01001000 01100101 01101100。 将之按6-bit为一组切分为4组，结果为：010010 000110 010101 101100，查表可知对应的Base64字符为：S G V s。</description>
+      <description>起因 最近在看ImGui的代码，其中有个将字体数据嵌入到源码的写法1引起了我的注意，它采用了一种之前没接触过的编码方式：Base85。从这里开始，对相关的领域进行了一次简单的梳理。&#xA;什么是Binary-to-text编码2？ 顾名思义，Binary-to-text编码是一种将二进制数据转换为文本形式的编码方式。更精确的说，它是一种将二进制数据转换为由 “可打印字符” 组成的文本流形式的编码方式。&#xA;为什么要存在这个东西？主要是为了解决如下两类问题：&#xA;某些传输信道或介质不支持二进制数据，例如E-Mail或NNTP； 某些传输信道或介质不能正确的处理8-bit字符编码（或者说：not 8-bit clean）； 看下这个编码的两端，一边是二进制数据，一边是文本。&#xA;二进制数据，大家通常的理解是一个字节流，同时每1个字节由8个比特组成。稍微延伸一下，Quora上这个问题比较详细的解释了Why is one byte formed by 8 bits?&#xA;文本，在这个上下文中，特指的是ASCII编码中的printable characters。ASCII编码是一个7-bit的编码，最多可表示128个唯一字符。其中控制字符33个（0x0-0x1F, 0x7F），可打印字符95个（0x20-0x7E）。&#xA;一个重要的问题是，在现代二进制计算机中，文本（或字符）在实现上也是基于字节来存储，也就是虽然单个ASCII字符只需要用7-bit来描述，在具体实现中1个ASCII字符会被存储为1个字节，也即占用8-bit。换句话说，从信息编码效率来看，以字节形式存储的文本，编码效率最高不会超过87.5% (7/8)，并随着编码中所实际使用的唯一字符数的降低而进一步降低。与之对应的，Binary-to-text编码的效率通常也会低于1，也就是编码后的文本串所占用的字节数通常要大于原始二进制数据所占的字节数。&#xA;回到ImGui将字体嵌入源码的情况：字体文件是二进制数据，而C++源码中的string literal当然无法支持二进制数据，因此这里使用了Base85将二进制数据编码为文本流，再嵌入到源码中。&#xA;Base16 Base16或者说是hexadecimal，应该是程序员们最熟悉的一种Binary-to-text编码了。其文本中的单个字符具有16种唯一值，能表示4-bit的信息（2^4 = 16），因此一个8-bit的字节刚好可以用两个字符来表示，编码效率为50%。&#xA;对应到文本字符的选择上，理论上可以从可打印字符中任意挑选16个来表示，Base16实际选择了最容易理解的0, 1, 2, &amp;hellip;, 9, a, b, c, d, e, f这16个字符来分别表示0 ~ 15，其中这6个字母大小写不敏感。&#xA;看个例子，开发人员常用的HexViewer类工具，是一种典型的Base16转换场景。例如用HexViewer打开一个.zip文件，可以看到其前4个字节的Magic word为：&amp;ldquo;PK␃␄&amp;rdquo;: Base64 Base64应该是使用最多的Binary-to-text编码，被广泛用于互联网环境，例如在HTML/CSS中嵌入二进制数据，在E-Mail消息中编码二进制附件文件等。其文本中的单个字符具有64种唯一值，能表示6-bit的信息（2^6 = 64），因此3个字节的二进制数据（3 x 8-bit）刚好可以用4个字符来表示（4 x 6-bit），编码效率为75%。&#xA;Why 64? 主要原因是：&#xA;Base为2的n次幂时，方便进行Base 2到Base 2^n的转换（n个bit为一组进行转换即可）； ASCII中共有95个可打印字符，而64是&amp;lt;=95的数中最大的2的n次幂数； 在文本字符子集的选择上，Base64稍有不同：大写字母AZ表示025，小写字母az表示2651，数字09表示5261，+表示62，/表示63。此外，=字符用于将编码后文本长度padding到4的倍数。 网上有简易的Base64编码在线转换工具3，我们来看个例子： 输入文本中的前3个字节为&amp;quot;Hel&amp;quot;，对应的二进制为：01001000 01100101 01101100。 将之按6-bit为一组切分为4组，结果为：010010 000110 010101 101100，查表可知对应的Base64字符为：S G V s。</description>
     </item>
     <item>
       <title>一个测试CPU分支预测的示例程序</title>

@@ -1,24 +1,39 @@
 <!DOCTYPE html>
-<html><head>
+<html><head lang="en">
 	<meta charset="utf-8" />
 	<meta http-equiv="X-UA-Compatible" content="IE=edge"><title>从Base16到Base85, 谈谈Binary-to-text编码 - zhuyie&#39;s blog</title><meta name="viewport" content="width=device-width, initial-scale=1">
-
+	<meta name="description" content="Base64编码很多人都接触过，但还有很多其它的类似编码系统，熟悉的人可能就不是那么多了。" />
 	<meta property="og:image" content=""/>
-	<meta property="og:title" content="从Base16到Base85, 谈谈Binary-to-text编码" />
-<meta property="og:description" content="Base64编码很多人都接触过，但还有很多其它的类似编码系统，熟悉的人可能就不是那么多了。" />
-<meta property="og:type" content="article" />
-<meta property="og:url" content="https://zhuyie.github.io/posts/binary-to-text-encoding/" /><meta property="article:section" content="posts" />
-<meta property="article:published_time" content="2021-08-09T09:56:58+08:00" />
-<meta property="article:modified_time" content="2021-08-09T09:56:58+08:00" />
+	<meta property="og:url" content="https://zhuyie.github.io/posts/binary-to-text-encoding/">
+  <meta property="og:site_name" content="zhuyie&#39;s blog">
+  <meta property="og:title" content="从Base16到Base85, 谈谈Binary-to-text编码">
+  <meta property="og:description" content="Base64编码很多人都接触过，但还有很多其它的类似编码系统，熟悉的人可能就不是那么多了。">
+  <meta property="og:locale" content="en_us">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="posts">
+    <meta property="article:published_time" content="2021-08-09T09:56:58+08:00">
+    <meta property="article:modified_time" content="2021-08-09T09:56:58+08:00">
 
-<meta name="twitter:card" content="summary"/><meta name="twitter:title" content="从Base16到Base85, 谈谈Binary-to-text编码"/>
-<meta name="twitter:description" content="Base64编码很多人都接触过，但还有很多其它的类似编码系统，熟悉的人可能就不是那么多了。"/>
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="从Base16到Base85, 谈谈Binary-to-text编码">
+  <meta name="twitter:description" content="Base64编码很多人都接触过，但还有很多其它的类似编码系统，熟悉的人可能就不是那么多了。">
 <script src="https://zhuyie.github.io/js/feather.min.js"></script>
 	
-	<link href="https://zhuyie.github.io/css/fonts.css" rel="stylesheet">
 	
-	<link rel="stylesheet" type="text/css" media="screen" href="https://zhuyie.github.io/css/main.css" /><link rel="stylesheet" type="text/css" href="https://zhuyie.github.io/css/dark.css" media="(prefers-color-scheme: dark)" />
+        <link href="https://zhuyie.github.io/css/fonts.2c2227b81b1970a03e760aa2e6121cd01f87c88586803cbb282aa224720a765f.css" rel="stylesheet">
 	
+
+	
+	<link rel="stylesheet" type="text/css" media="screen" href="https://zhuyie.github.io/css/main.2791d83c1db3c67f485c59f4884633dc948ab5fb5d0b38afd22a8aa638a44ae6.css" />
+		<link id="darkModeStyle" rel="stylesheet" type="text/css" href="https://zhuyie.github.io/css/dark.d22e2a2879d933a4b781535fc4c4c716e9f9d35ea4986dd0cbabda82effc4bdd.css" media="(prefers-color-scheme: dark)"  />
+	
+
+	
+	
+
+	
+	
+
 	
 </head>
 <body>
@@ -32,6 +47,7 @@
 		
 		<a href="/posts">All posts</a>
 		
+		
 	</nav>
 </header>
 
@@ -41,6 +57,8 @@
 			<h1 class="title">从Base16到Base85, 谈谈Binary-to-text编码</h1>
 			<div class="meta">Posted on Aug 9, 2021</div>
 		</div>
+		
+
 		
 
 		<section class="body">
@@ -70,7 +88,7 @@
 <li>Base为2的n次幂时，方便进行Base 2到Base 2^n的转换（n个bit为一组进行转换即可）；</li>
 <li>ASCII中共有95个可打印字符，而64是&lt;=95的数中最大的2的n次幂数；</li>
 </ol>
-<p>在文本字符子集的选择上，Base64稍有不同：大写字母A~Z表示0~25，小写字母a~z表示26~51，数字0~9表示52~61，+表示62，/表示63。此外，=字符用于将编码后文本长度padding到4的倍数。
+<p>在文本字符子集的选择上，Base64稍有不同：大写字母A<del>Z表示0</del>25，小写字母a<del>z表示26</del>51，数字0<del>9表示52</del>61，+表示62，/表示63。此外，=字符用于将编码后文本长度padding到4的倍数。
 <img src="/images/binary-to-text-encoding-2.png" alt=""></p>
 <p>网上有简易的Base64编码在线转换工具<sup id="fnref:3"><a href="#fn:3" class="footnote-ref" role="doc-noteref">3</a></sup>，我们来看个例子：
 <img src="/images/binary-to-text-encoding-3.png" alt="">
@@ -144,27 +162,27 @@
 			
 			
 		</div>
-	</article>
+		</article>
 </main>
 <footer>
-<hr><a class="soc" href="https://github.com/zhuyie" title="GitHub"><i data-feather="github"></i></a>|⚡️
-	2024  © zhuyie |  <a href="https://github.com/athul/archie">Archie Theme</a> | Built with <a href="https://gohugo.io">Hugo</a>
+  <div style="display:flex"><a class="soc" href="https://github.com/zhuyie" rel="me" title="GitHub"><i data-feather="github"></i></a>
+    <a class="border"></a></div>
+  <div class="footer-info">
+    2024  © zhuyie |  <a
+      href="https://github.com/athul/archie">Archie Theme</a> | Built with <a href="https://gohugo.io">Hugo</a>
+  </div>
 </footer>
 
 
-<script>
-var doNotTrack = false;
-if (!doNotTrack) {
-	window.ga=window.ga||function(){(ga.q=ga.q||[]).push(arguments)};ga.l=+new Date;
-	ga('create', 'UA-195056302-1', 'auto');
-	
-	ga('send', 'pageview');
-}
-</script>
-<script async src='https://www.google-analytics.com/analytics.js'></script>
+  
+    
+      
+    
+  
+
 
 <script>
-      feather.replace()
+  feather.replace()
 </script></div>
     </body>
 </html>
