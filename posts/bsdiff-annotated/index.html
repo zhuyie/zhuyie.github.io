@@ -64,7 +64,7 @@
 		<section class="body">
 			<h2 id="简介">简介</h2>
 <p>bsdiff是一种二进制增量编码（delta encoding<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup>）算法。它由Colin Percival发明及开源，被广泛应用于各类二进制数据（特别是可执行程序）的增量更新（delta updates）场景中，例如Android使用bsdiff来减小OTA更新数据包的尺寸<sup id="fnref:2"><a href="#fn:2" class="footnote-ref" role="doc-noteref">2</a></sup>。</p>
-<p>bsdiff的官网在<a href="https://www.daemonology.net/bsdiff/">https://www.daemonology.net/bsdiff/</a>，它由bsdiff和bspatch两个模块组成，前者负责生成<strong>新版本</strong>相对于<strong>旧版本</strong>的<em>增量数据</em>，后者负责基于<strong>旧版本</strong>和<strong>增量数据</strong>还原出<em>新版本</em>。bsdiff目前的最新版本是（很多年发布的）<a href="https://www.daemonology.net/bsdiff/bsdiff-4.3.tar.gz">4.3</a>。</p>
+<p>bsdiff的官网在<a href="https://www.daemonology.net/bsdiff/">https://www.daemonology.net/bsdiff/</a>，它由bsdiff和bspatch两个模块组成，前者负责生成<strong>新版本</strong>相对于<strong>旧版本</strong>的<em>增量数据</em>，后者负责基于<strong>旧版本</strong>和<strong>增量数据</strong>还原出<em>新版本</em>。bsdiff目前的最新版本是（很多年前发布的）<a href="https://www.daemonology.net/bsdiff/bsdiff-4.3.tar.gz">4.3</a>。</p>
 <p>作为一个典型的博士生作品，bsdiff源码的工程化水平相当一般，代码结构和风格、变量命名等都比较马虎。为了便于理解，这里结合4.3的源码进行一个详细点的分析。</p>
 <h2 id="原理">原理</h2>
 <p>Colin Percival有一篇3页的小论文<a href="https://www.daemonology.net/papers/bsdiff.pdf">Naive differences of executable code</a>，描述了bsdiff算法的基本原理和思路。简单来说，源代码中的少量修改（例如增/删/改几行代码）反映到编译后的可执行文件上会出现<strong>修改量大幅度放大</strong>的情况。这主要是因为可执行文件中会记录很多地址类数据（例如分支语句的跳转目标），大量的地址会因为少量源代码的修改而出现<strong>位移</strong>。此时如果按照传统的copy-and-insert方法来构造binary patch，效率会相当低下。在作者的实验中，一个500kB左右的可执行程序（按常规经验至少对应10万行以上的C源码）的源码中进行1行修改，会产生约50kB的patch文件。</p>
