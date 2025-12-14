@@ -86,10 +86,19 @@
 <li><strong>输入持续膨胀</strong>：Agent 在执行任务的过程中，会积累大量的对话历史、工具使用记录和网页内容，导致 Context 迅速变长。</li>
 <li><strong>模型“注意力”有限</strong>：
 <ul>
-<li><strong>读得多不代表读得懂</strong>：即使模型（如 Gemini 1.5+）可以容纳数百万个 Token，但理解能力未必能跟上。</li>
-<li><strong>中间迷失问题 (Lost in the Middle)</strong>：当 Context 过长，模型容易忽略中间的信息，导致准确率下降。</li>
-<li><strong>多轮对话迷失问题 (Lost in the Conversation)</strong>：在多轮对话中，过多的历史信息反而会干扰模型，使其表现不如单轮对话。</li>
-<li><strong>上下文腐烂 (Context Rot)</strong>：随着输入长度增加，模型性能可能下降。</li>
+<li><strong>读得多不代表读得懂</strong>：即使模型（如 Gemini 1.5+）可以容纳数百万个 Token，但理解能力未必能跟上。<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> <sup id="fnref:2"><a href="#fn:2" class="footnote-ref" role="doc-noteref">2</a></sup>
+<figure><img src="/images/context-engineering-2.jpg" width="90%">
+</figure>
+</li>
+<li><strong>中间迷失问题 (Lost in the Middle)</strong>：当 Context 过长，模型容易忽略中间的信息，导致准确率下降。<sup id="fnref:3"><a href="#fn:3" class="footnote-ref" role="doc-noteref">3</a></sup></li>
+<li><strong>多轮对话迷失问题 (Lost in the Conversation)</strong>：在多轮对话中，过多的历史信息反而会干扰模型，使其表现不如单轮对话。<sup id="fnref:4"><a href="#fn:4" class="footnote-ref" role="doc-noteref">4</a></sup>
+<figure><img src="/images/context-engineering-1.jpg" width="90%">
+</figure>
+</li>
+<li><strong>上下文腐烂 (Context Rot)</strong>：随着输入长度增加，模型性能可能下降。<sup id="fnref:5"><a href="#fn:5" class="footnote-ref" role="doc-noteref">5</a></sup>
+<figure><img src="https://research.trychroma.com/img/context_rot/hero_plot.png" width="80%">
+</figure>
+</li>
 </ul>
 </li>
 </ul>
@@ -116,9 +125,37 @@
 <li><strong>隔离杂讯</strong>：例如“订餐厅”的 Agent 只需知道餐厅信息，“订旅馆”的 Agent 只需知道旅馆信息，互不干扰。</li>
 <li><strong>主控与分流</strong>：由一个 Leader 分派任务，各个 Sub-Agent 执行完后只回报最终结果。这样主 Context 就不会被各个子任务的繁杂过程给塞爆。</li>
 </ul>
+<p>LangChain做了一个评测<sup id="fnref:6"><a href="#fn:6" class="footnote-ref" role="doc-noteref">6</a></sup>：当任务领域为 1 时，single-agent 的性能是最好的，高于 multi-agent；任务领域达到 2 个或以上时，single-agent 的性能会显著下降，而 multi-agent 能保持稳定。这其实挺符合人类的真实情况：<strong>多人协作会受制于不充分的信息传递，但能获得术业有专攻、不受打扰的优势。</strong>
+<figure><img src="https://blog.langchain.com/content/images/2025/06/newplot--1-.png" width="80%">
+</figure>
+</p>
 <hr>
 <h2 id="4-总结">4. 总结</h2>
 <p>Context Engineering 就是 AI Agent 的<strong>信息注意力管理术</strong>，确保模型在处理复杂任务时，大脑（Context）里装的永远是最关键的信息。</p>
+<h2 id="references">References</h2>
+<div class="footnotes" role="doc-endnotes">
+<hr>
+<ol>
+<li id="fn:1">
+<p><a href="https://www.dbreunig.com/2025/06/22/how-contexts-fail-and-how-to-fix-them.html">https://www.dbreunig.com/2025/06/22/how-contexts-fail-and-how-to-fix-them.html</a>&#160;<a href="#fnref:1" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+</li>
+<li id="fn:2">
+<p><a href="https://arxiv.org/pdf/2502.05167">https://arxiv.org/pdf/2502.05167</a>&#160;<a href="#fnref:2" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+</li>
+<li id="fn:3">
+<p><a href="https://arxiv.org/abs/2307.03172">https://arxiv.org/abs/2307.03172</a>&#160;<a href="#fnref:3" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+</li>
+<li id="fn:4">
+<p><a href="https://arxiv.org/pdf/2505.06120v1">https://arxiv.org/pdf/2505.06120v1</a>&#160;<a href="#fnref:4" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+</li>
+<li id="fn:5">
+<p><a href="https://research.trychroma.com/context-rot">https://research.trychroma.com/context-rot</a>&#160;<a href="#fnref:5" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+</li>
+<li id="fn:6">
+<p><a href="https://blog.langchain.com/benchmarking-multi-agent-architectures/">https://blog.langchain.com/benchmarking-multi-agent-architectures/</a>&#160;<a href="#fnref:6" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+</li>
+</ol>
+</div>
 
 		</section>
 
