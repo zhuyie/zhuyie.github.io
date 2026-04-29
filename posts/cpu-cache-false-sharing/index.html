@@ -3,7 +3,7 @@
 	<meta charset="utf-8" />
 	<meta http-equiv="X-UA-Compatible" content="IE=edge"><title>CPU缓存伪共享(False Sharing)问题 - zhuyie&#39;s blog</title><meta name="viewport" content="width=device-width, initial-scale=1">
 	<meta name="description" content="Memory Hierarchy, Cache Coherence, False Sharing." />
-	<meta property="og:image" content=""/>
+	<meta property="og:image" content="https://zhuyie.github.io/"/>
 	<meta property="og:url" content="https://zhuyie.github.io/posts/cpu-cache-false-sharing/">
   <meta property="og:site_name" content="zhuyie&#39;s blog">
   <meta property="og:title" content="CPU缓存伪共享(False Sharing)问题">
@@ -17,24 +17,17 @@
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="CPU缓存伪共享(False Sharing)问题">
   <meta name="twitter:description" content="Memory Hierarchy, Cache Coherence, False Sharing.">
-<script src="https://zhuyie.github.io/js/feather.min.js"></script>
-	
-	
+
         <link href="https://zhuyie.github.io/css/fonts.2c2227b81b1970a03e760aa2e6121cd01f87c88586803cbb282aa224720a765f.css" rel="stylesheet">
 	
 
 	
-	<link rel="stylesheet" type="text/css" media="screen" href="https://zhuyie.github.io/css/main.513e06defdefbe83b5c7564f1974fcd4f3d753ccd1159130d6bf895f2ad800f8.css" />
-		<link id="darkModeStyle" rel="stylesheet" type="text/css" href="https://zhuyie.github.io/css/dark.d22e2a2879d933a4b781535fc4c4c716e9f9d35ea4986dd0cbabda82effc4bdd.css" media="(prefers-color-scheme: dark)"  />
-	
-
-	
-	
-
-	
-	
-
-	
+	<link rel="stylesheet" type="text/css" media="screen" href="https://zhuyie.github.io/css/main.92c7e6f6f5baede55d6238ba492bcbd00e10ca39a6bbdec527692bfc9564a927.css" />
+		<link id="darkModeStyle" rel="stylesheet" type="text/css" href="https://zhuyie.github.io/css/dark.4529c04ce20ceac5a42e37a63e092c89354fbd00e6209bd2995100d61b71e8df.css" media="(prefers-color-scheme: dark)"  />
+		
+		
+		<link rel="stylesheet" type="text/css" href="https://zhuyie.github.io/css/custom.29552d0a8b23b563c10b035182a21e7eb9f79d956d4c62410864b55ed756e8ae.css">
+		
 </head>
 <body>
         <div class="content"><header>
@@ -52,25 +45,25 @@
 </header>
 
 <main>
-	<article>
-		<div class="title">
-			<h1 class="title">CPU缓存伪共享(False Sharing)问题</h1>
-			<div class="meta">Posted on May 3, 2021</div>
-		</div>
-		
-
-		
-
-		<section class="body">
-			<h2 id="起因">起因</h2>
+  <article>
+    <div class="post-container">
+      
+      <div class="post-content">
+        <div class="title">
+          <h1 class="title">CPU缓存伪共享(False Sharing)问题</h1>
+          <div class="meta">Posted on May 3, 2021</div>
+        </div>
+        
+        <section class="body">
+          <h2 id="起因">起因</h2>
 <p>一个通过<a href="https://blogs.sas.com/content/iml/2016/03/14/monte-carlo-estimates-of-pi.html">蒙特卡洛方法估算 π 值</a>的测试程序，采用了多线程的方式，其代码大致如下：</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-c++" data-lang="c++"><span style="display:flex;"><span><span style="color:#75715e">#include</span> <span style="color:#75715e">&#34;...&#34;</span><span style="color:#75715e">
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-c++" data-lang="c++"><span style="display:flex;"><span><span style="color:#75715e">#include</span> <span style="color:#75715e">&#34;...&#34;</span><span style="color:#75715e">
+</span></span></span><span style="display:flex;"><span>
 </span></span><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">RandomNumber</span>
 </span></span><span style="display:flex;"><span>{
 </span></span><span style="display:flex;"><span>    mt19937 mt19937_;  <span style="color:#75715e">// random number generator
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    <span style="color:#66d9ef">const</span> <span style="color:#66d9ef">float</span> MT19937_FLOAT_MULTI <span style="color:#f92672">=</span> <span style="color:#ae81ff">2.3283064365386962890625e-10</span>f; <span style="color:#75715e">// (2^32-1)^-1
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">public</span><span style="color:#f92672">:</span>
+</span></span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">const</span> <span style="color:#66d9ef">float</span> MT19937_FLOAT_MULTI <span style="color:#f92672">=</span> <span style="color:#ae81ff">2.3283064365386962890625e-10</span>f; <span style="color:#75715e">// (2^32-1)^-1
+</span></span></span><span style="display:flex;"><span><span style="color:#66d9ef">public</span><span style="color:#f92672">:</span>
 </span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">void</span> seed(<span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">int</span> seed)
 </span></span><span style="display:flex;"><span>    {
 </span></span><span style="display:flex;"><span>        mt19937_.seed(seed);
@@ -84,7 +77,7 @@
 </span></span><span style="display:flex;"><span><span style="color:#66d9ef">void</span> <span style="color:#a6e22e">worker</span>(<span style="color:#66d9ef">int</span> worker_id, <span style="color:#66d9ef">int64_t</span> samples, RandomNumber <span style="color:#f92672">*</span>rnd, <span style="color:#66d9ef">int64_t</span> <span style="color:#f92672">*</span>in)
 </span></span><span style="display:flex;"><span>{
 </span></span><span style="display:flex;"><span>    rnd<span style="color:#f92672">-&gt;</span>seed(worker_id);  <span style="color:#75715e">// seed the prng 
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    <span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">int64_t</span> i <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>; i <span style="color:#f92672">&lt;</span> samples; i<span style="color:#f92672">++</span>)
+</span></span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">int64_t</span> i <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>; i <span style="color:#f92672">&lt;</span> samples; i<span style="color:#f92672">++</span>)
 </span></span><span style="display:flex;"><span>    {
 </span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">float</span> x <span style="color:#f92672">=</span> (<span style="color:#f92672">*</span>rnd)();
 </span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">float</span> y <span style="color:#f92672">=</span> (<span style="color:#f92672">*</span>rnd)();
@@ -100,7 +93,7 @@
 </span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">int</span> num_threads <span style="color:#f92672">=</span> <span style="color:#ae81ff">16</span>;
 </span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">int64_t</span> num_samples <span style="color:#f92672">=</span> <span style="color:#ae81ff">1000000000</span>;
 </span></span><span style="display:flex;"><span>    <span style="color:#75715e">// parsing command line arguments
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>
+</span></span></span><span style="display:flex;"><span>
 </span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">auto</span> start <span style="color:#f92672">=</span> system_clock<span style="color:#f92672">::</span>now();
 </span></span><span style="display:flex;"><span>
 </span></span><span style="display:flex;"><span>    RandomNumber<span style="color:#f92672">*</span> rnd <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> RandomNumber[num_threads];
@@ -126,7 +119,7 @@
 </span></span><span style="display:flex;"><span>
 </span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">double</span> pi <span style="color:#f92672">=</span> <span style="color:#ae81ff">4</span> <span style="color:#f92672">*</span> circle_points <span style="color:#f92672">/</span> (<span style="color:#66d9ef">double</span>)total_points;
 </span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">double</span> pi_true <span style="color:#f92672">=</span> acos(<span style="color:#f92672">-</span><span style="color:#ae81ff">1.0</span>);  <span style="color:#75715e">// true value of pi
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    <span style="color:#66d9ef">double</span> error <span style="color:#f92672">=</span> abs(pi <span style="color:#f92672">-</span> pi_true) <span style="color:#f92672">/</span> pi_true <span style="color:#f92672">*</span> <span style="color:#ae81ff">100</span>;
+</span></span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">double</span> error <span style="color:#f92672">=</span> abs(pi <span style="color:#f92672">-</span> pi_true) <span style="color:#f92672">/</span> pi_true <span style="color:#f92672">*</span> <span style="color:#ae81ff">100</span>;
 </span></span><span style="display:flex;"><span>    
 </span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">auto</span> duration <span style="color:#f92672">=</span> duration_cast<span style="color:#f92672">&lt;</span>microseconds<span style="color:#f92672">&gt;</span>(system_clock<span style="color:#f92672">::</span>now() <span style="color:#f92672">-</span> start);
 </span></span><span style="display:flex;"><span>
@@ -281,20 +274,26 @@
 </ol>
 </div>
 
-		</section>
+        </section>
+        <div class="post-tags">
+          
+          
+          
+        </div>
+      </div>
 
-		<div class="post-tags">
-			
-			
-			
-		</div>
-		</article>
+      
+      
+    </div>
+
+    </article>
 </main>
 <footer>
-  <div style="display:flex"><a class="soc" href="https://github.com/zhuyie" rel="me" title="GitHub"><i data-feather="github"></i></a>
-    <a class="border"></a></div>
+  <div style="display:flex"><a class="soc" href="https://github.com/zhuyie" rel="me" title="GitHub"><svg class="feather">
+       <use href="/svg/feather-sprite.51cf5647cb1987f769b616558f2620fd9423d72058490231b391bf6aa3744b55.svg#github" />
+    </svg></a><a class="border"></a></div>
   <div class="footer-info">
-    2025  © zhuyie |  <a
+    2026  © zhuyie |  <a
       href="https://github.com/athul/archie">Archie Theme</a> | Built with <a href="https://gohugo.io">Hugo</a>
   </div>
 </footer>
@@ -303,7 +302,7 @@
       <script async src="https://www.googletagmanager.com/gtag/js?id=G-LK9RXPY8YE"></script>
       <script>
         var doNotTrack = false;
-        if ( false ) {
+        if ( true ) {
           var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
           var doNotTrack = (dnt == "1" || dnt == "yes");
         }
@@ -314,8 +313,7 @@
           gtag('config', 'G-LK9RXPY8YE');
         }
       </script>
-<script>
-  feather.replace()
-</script></div>
+
+</div>
     </body>
 </html>

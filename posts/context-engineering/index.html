@@ -3,7 +3,7 @@
 	<meta charset="utf-8" />
 	<meta http-equiv="X-UA-Compatible" content="IE=edge"><title>上下文工程 (Context Engineering) 学习笔记 - zhuyie&#39;s blog</title><meta name="viewport" content="width=device-width, initial-scale=1">
 	<meta name="description" content="这份笔记整理自李宏毅老师关于 AI Agent 原理的课程，旨在提炼 Context Engineering 的核心概念与实操方法。" />
-	<meta property="og:image" content=""/>
+	<meta property="og:image" content="https://zhuyie.github.io/"/>
 	<meta property="og:url" content="https://zhuyie.github.io/posts/context-engineering/">
   <meta property="og:site_name" content="zhuyie&#39;s blog">
   <meta property="og:title" content="上下文工程 (Context Engineering) 学习笔记">
@@ -17,24 +17,17 @@
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="上下文工程 (Context Engineering) 学习笔记">
   <meta name="twitter:description" content="这份笔记整理自李宏毅老师关于 AI Agent 原理的课程，旨在提炼 Context Engineering 的核心概念与实操方法。">
-<script src="https://zhuyie.github.io/js/feather.min.js"></script>
-	
-	
+
         <link href="https://zhuyie.github.io/css/fonts.2c2227b81b1970a03e760aa2e6121cd01f87c88586803cbb282aa224720a765f.css" rel="stylesheet">
 	
 
 	
-	<link rel="stylesheet" type="text/css" media="screen" href="https://zhuyie.github.io/css/main.513e06defdefbe83b5c7564f1974fcd4f3d753ccd1159130d6bf895f2ad800f8.css" />
-		<link id="darkModeStyle" rel="stylesheet" type="text/css" href="https://zhuyie.github.io/css/dark.d22e2a2879d933a4b781535fc4c4c716e9f9d35ea4986dd0cbabda82effc4bdd.css" media="(prefers-color-scheme: dark)"  />
-	
-
-	
-	
-
-	
-	
-
-	
+	<link rel="stylesheet" type="text/css" media="screen" href="https://zhuyie.github.io/css/main.92c7e6f6f5baede55d6238ba492bcbd00e10ca39a6bbdec527692bfc9564a927.css" />
+		<link id="darkModeStyle" rel="stylesheet" type="text/css" href="https://zhuyie.github.io/css/dark.4529c04ce20ceac5a42e37a63e092c89354fbd00e6209bd2995100d61b71e8df.css" media="(prefers-color-scheme: dark)"  />
+		
+		
+		<link rel="stylesheet" type="text/css" href="https://zhuyie.github.io/css/custom.29552d0a8b23b563c10b035182a21e7eb9f79d956d4c62410864b55ed756e8ae.css">
+		
 </head>
 <body>
         <div class="content"><header>
@@ -52,17 +45,17 @@
 </header>
 
 <main>
-	<article>
-		<div class="title">
-			<h1 class="title">上下文工程 (Context Engineering) 学习笔记</h1>
-			<div class="meta">Posted on Dec 14, 2025</div>
-		</div>
-		
-
-		
-
-		<section class="body">
-			<p>这份笔记整理自李宏毅老师关于 AI Agent 原理的课程（<a href="https://www.youtube.com/watch?v=lVdajtNpaGI">视频</a>, <a href="https://speech.ee.ntu.edu.tw/~hylee/GenAI-ML/2025-fall-course-data/Agent.pdf">PDF</a>），旨在提炼 Context Engineering 的核心概念与实操方法。</p>
+  <article>
+    <div class="post-container">
+      
+      <div class="post-content">
+        <div class="title">
+          <h1 class="title">上下文工程 (Context Engineering) 学习笔记</h1>
+          <div class="meta">Posted on Dec 14, 2025</div>
+        </div>
+        
+        <section class="body">
+          <p>这份笔记整理自李宏毅老师关于 AI Agent 原理的课程（<a href="https://www.youtube.com/watch?v=lVdajtNpaGI">视频</a>, <a href="https://speech.ee.ntu.edu.tw/~hylee/GenAI-ML/2025-fall-course-data/Agent.pdf">PDF</a>），旨在提炼 Context Engineering 的核心概念与实操方法。</p>
 <hr>
 <h2 id="1-核心定义它与-prompt-engineering-有何不同">1. 核心定义：它与 Prompt Engineering 有何不同？</h2>
 <ul>
@@ -96,7 +89,7 @@
 </figure>
 </li>
 <li><strong>上下文腐烂 (Context Rot)</strong>：随着输入长度增加，模型性能可能下降。<sup id="fnref:5"><a href="#fn:5" class="footnote-ref" role="doc-noteref">5</a></sup>
-<figure><img src="https://research.trychroma.com/img/context_rot/hero_plot.png" width="80%">
+<figure><img src="https://www.trychroma.com/img/context_rot/hero_plot.png" width="80%">
 </figure>
 </li>
 </ul>
@@ -126,7 +119,7 @@
 <li><strong>主控与分流</strong>：由一个 Leader 分派任务，各个 Sub-Agent 执行完后只回报最终结果。这样主 Context 就不会被各个子任务的繁杂过程给塞爆。</li>
 </ul>
 <p>LangChain做了一个评测<sup id="fnref:6"><a href="#fn:6" class="footnote-ref" role="doc-noteref">6</a></sup>：当任务领域为 1 时，single-agent 的性能是最好的，高于 multi-agent；任务领域达到 2 个或以上时，single-agent 的性能会显著下降，而 multi-agent 能保持稳定。这其实挺符合人类的真实情况：<strong>多人协作会受制于不充分的信息传递，但能获得术业有专攻、不受打扰的优势。</strong>
-<figure><img src="https://blog.langchain.com/content/images/2025/06/newplot--1-.png" width="80%">
+<figure><img src="https://cdn.prod.website-files.com/65c81e88c254bb0f97633a71/69cbaaba1bfa8a96ce61ae8a_newplot--1-.png" width="80%">
 </figure>
 </p>
 <hr>
@@ -157,20 +150,26 @@
 </ol>
 </div>
 
-		</section>
+        </section>
+        <div class="post-tags">
+          
+          
+          
+        </div>
+      </div>
 
-		<div class="post-tags">
-			
-			
-			
-		</div>
-		</article>
+      
+      
+    </div>
+
+    </article>
 </main>
 <footer>
-  <div style="display:flex"><a class="soc" href="https://github.com/zhuyie" rel="me" title="GitHub"><i data-feather="github"></i></a>
-    <a class="border"></a></div>
+  <div style="display:flex"><a class="soc" href="https://github.com/zhuyie" rel="me" title="GitHub"><svg class="feather">
+       <use href="/svg/feather-sprite.51cf5647cb1987f769b616558f2620fd9423d72058490231b391bf6aa3744b55.svg#github" />
+    </svg></a><a class="border"></a></div>
   <div class="footer-info">
-    2025  © zhuyie |  <a
+    2026  © zhuyie |  <a
       href="https://github.com/athul/archie">Archie Theme</a> | Built with <a href="https://gohugo.io">Hugo</a>
   </div>
 </footer>
@@ -179,7 +178,7 @@
       <script async src="https://www.googletagmanager.com/gtag/js?id=G-LK9RXPY8YE"></script>
       <script>
         var doNotTrack = false;
-        if ( false ) {
+        if ( true ) {
           var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
           var doNotTrack = (dnt == "1" || dnt == "yes");
         }
@@ -190,8 +189,7 @@
           gtag('config', 'G-LK9RXPY8YE');
         }
       </script>
-<script>
-  feather.replace()
-</script></div>
+
+</div>
     </body>
 </html>

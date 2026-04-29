@@ -1,0 +1,22 @@
+/* Restore the pre-upgrade Archie link hover style. */
+:root {
+  --hovercolor: navy;
+}
+
+a:hover,
+a:focus {
+  background-color: var(--hovercolor);
+  color: #ffffff;
+  outline: none;
+}
+
+.tags a:hover,
+.tags a:focus {
+  background-color: var(--hovercolor);
+  color: #ffffff;
+}
+
+pre,
+pre code {
+  font-size: 0.9rem;
+}

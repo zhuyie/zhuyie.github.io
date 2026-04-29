@@ -3,7 +3,7 @@
 	<meta charset="utf-8" />
 	<meta http-equiv="X-UA-Compatible" content="IE=edge"><title>从Base16到Base85, 谈谈Binary-to-text编码 - zhuyie&#39;s blog</title><meta name="viewport" content="width=device-width, initial-scale=1">
 	<meta name="description" content="Base64编码很多人都接触过，但还有很多其它的类似编码系统，熟悉的人可能就不是那么多了。" />
-	<meta property="og:image" content=""/>
+	<meta property="og:image" content="https://zhuyie.github.io/"/>
 	<meta property="og:url" content="https://zhuyie.github.io/posts/binary-to-text-encoding/">
   <meta property="og:site_name" content="zhuyie&#39;s blog">
   <meta property="og:title" content="从Base16到Base85, 谈谈Binary-to-text编码">
@@ -17,24 +17,17 @@
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="从Base16到Base85, 谈谈Binary-to-text编码">
   <meta name="twitter:description" content="Base64编码很多人都接触过，但还有很多其它的类似编码系统，熟悉的人可能就不是那么多了。">
-<script src="https://zhuyie.github.io/js/feather.min.js"></script>
-	
-	
+
         <link href="https://zhuyie.github.io/css/fonts.2c2227b81b1970a03e760aa2e6121cd01f87c88586803cbb282aa224720a765f.css" rel="stylesheet">
 	
 
 	
-	<link rel="stylesheet" type="text/css" media="screen" href="https://zhuyie.github.io/css/main.513e06defdefbe83b5c7564f1974fcd4f3d753ccd1159130d6bf895f2ad800f8.css" />
-		<link id="darkModeStyle" rel="stylesheet" type="text/css" href="https://zhuyie.github.io/css/dark.d22e2a2879d933a4b781535fc4c4c716e9f9d35ea4986dd0cbabda82effc4bdd.css" media="(prefers-color-scheme: dark)"  />
-	
-
-	
-	
-
-	
-	
-
-	
+	<link rel="stylesheet" type="text/css" media="screen" href="https://zhuyie.github.io/css/main.92c7e6f6f5baede55d6238ba492bcbd00e10ca39a6bbdec527692bfc9564a927.css" />
+		<link id="darkModeStyle" rel="stylesheet" type="text/css" href="https://zhuyie.github.io/css/dark.4529c04ce20ceac5a42e37a63e092c89354fbd00e6209bd2995100d61b71e8df.css" media="(prefers-color-scheme: dark)"  />
+		
+		
+		<link rel="stylesheet" type="text/css" href="https://zhuyie.github.io/css/custom.29552d0a8b23b563c10b035182a21e7eb9f79d956d4c62410864b55ed756e8ae.css">
+		
 </head>
 <body>
         <div class="content"><header>
@@ -52,17 +45,17 @@
 </header>
 
 <main>
-	<article>
-		<div class="title">
-			<h1 class="title">从Base16到Base85, 谈谈Binary-to-text编码</h1>
-			<div class="meta">Posted on Aug 9, 2021</div>
-		</div>
-		
-
-		
-
-		<section class="body">
-			<h2 id="起因">起因</h2>
+  <article>
+    <div class="post-container">
+      
+      <div class="post-content">
+        <div class="title">
+          <h1 class="title">从Base16到Base85, 谈谈Binary-to-text编码</h1>
+          <div class="meta">Posted on Aug 9, 2021</div>
+        </div>
+        
+        <section class="body">
+          <h2 id="起因">起因</h2>
 <p>最近在看ImGui的代码，其中有个将字体数据嵌入到源码的写法<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup>引起了我的注意，它采用了一种之前没接触过的编码方式：<a href="https://en.wikipedia.org/wiki/Ascii85">Base85</a>。从这里开始，对相关的领域进行了一次简单的梳理。</p>
 <h2 id="什么是binary-to-text编码">什么是Binary-to-text编码<sup id="fnref:2"><a href="#fn:2" class="footnote-ref" role="doc-noteref">2</a></sup>？</h2>
 <p>顾名思义，Binary-to-text编码是一种将二进制数据转换为文本形式的编码方式。更精确的说，它是一种将二进制数据转换为由 “可打印字符” 组成的文本流形式的编码方式。</p>
@@ -121,7 +114,7 @@
 由于<code>log85(2^32) = 4.993</code>，同时<code>log84(2^32) = 5.006</code>，因此，85是能满足需求的最小base值。</p>
 <p>由此得到Base85。在字符集的选择上，Base85选择了一个连续区段，从33(&quot;!&quot;)到117(&ldquo;u&rdquo;)。在编码时，先将4字节二进制数据视为一个32位的二进制整数，转换为5位的85进制数，再将每一位加上33得到5个对应的ASCII字符，即为Base85编码后结果。</p>
 <p>看个例子：假定一个4字节数0x00010002，对应到10进制是65538。我们将它转换为85进制数：</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-fallback" data-lang="fallback"><span style="display:flex;"><span>65538 / 85 = 771 ... 3
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-fallback" data-lang="fallback"><span style="display:flex;"><span>65538 / 85 = 771 ... 3
 </span></span><span style="display:flex;"><span>  771 / 85 = 9 ... 6
 </span></span><span style="display:flex;"><span>
 </span></span><span style="display:flex;"><span>因此结果5位85进制数为：0 0 9 6 3，我们验算一下：
@@ -155,20 +148,26 @@
 </ol>
 </div>
 
-		</section>
+        </section>
+        <div class="post-tags">
+          
+          
+          
+        </div>
+      </div>
 
-		<div class="post-tags">
-			
-			
-			
-		</div>
-		</article>
+      
+      
+    </div>
+
+    </article>
 </main>
 <footer>
-  <div style="display:flex"><a class="soc" href="https://github.com/zhuyie" rel="me" title="GitHub"><i data-feather="github"></i></a>
-    <a class="border"></a></div>
+  <div style="display:flex"><a class="soc" href="https://github.com/zhuyie" rel="me" title="GitHub"><svg class="feather">
+       <use href="/svg/feather-sprite.51cf5647cb1987f769b616558f2620fd9423d72058490231b391bf6aa3744b55.svg#github" />
+    </svg></a><a class="border"></a></div>
   <div class="footer-info">
-    2025  © zhuyie |  <a
+    2026  © zhuyie |  <a
       href="https://github.com/athul/archie">Archie Theme</a> | Built with <a href="https://gohugo.io">Hugo</a>
   </div>
 </footer>
@@ -177,7 +176,7 @@
       <script async src="https://www.googletagmanager.com/gtag/js?id=G-LK9RXPY8YE"></script>
       <script>
         var doNotTrack = false;
-        if ( false ) {
+        if ( true ) {
           var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
           var doNotTrack = (dnt == "1" || dnt == "yes");
         }
@@ -188,8 +187,7 @@
           gtag('config', 'G-LK9RXPY8YE');
         }
       </script>
-<script>
-  feather.replace()
-</script></div>
+
+</div>
     </body>
 </html>
