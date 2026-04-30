@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html><head lang="en">
+	<meta charset="utf-8" />
+	<meta http-equiv="X-UA-Compatible" content="IE=edge"><title>从 smollm3.go 看 LLM inference - zhuyie&#39;s blog</title><meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta name="description" content="A small, readable Go runtime for SmolLM3-3B local inference, with tokenizer, int8 weight-only quantization, KV cache, and ARM64 SIMD." />
+	<meta property="og:image" content="https://zhuyie.github.io/"/>
+	<meta property="og:url" content="https://zhuyie.github.io/posts/llm-inference-from-smollm3/">
+  <meta property="og:site_name" content="zhuyie&#39;s blog">
+  <meta property="og:title" content="从 smollm3.go 看 LLM inference">
+  <meta property="og:description" content="A small, readable Go runtime for SmolLM3-3B local inference, with tokenizer, int8 weight-only quantization, KV cache, and ARM64 SIMD.">
+  <meta property="og:locale" content="en_us">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="posts">
+    <meta property="article:published_time" content="2026-04-30T09:27:19+08:00">
+    <meta property="article:modified_time" content="2026-04-30T09:27:19+08:00">
+
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="从 smollm3.go 看 LLM inference">
+  <meta name="twitter:description" content="A small, readable Go runtime for SmolLM3-3B local inference, with tokenizer, int8 weight-only quantization, KV cache, and ARM64 SIMD.">
+
+        <link href="https://zhuyie.github.io/css/fonts.2c2227b81b1970a03e760aa2e6121cd01f87c88586803cbb282aa224720a765f.css" rel="stylesheet">
+	
+
+	
+	<link rel="stylesheet" type="text/css" media="screen" href="https://zhuyie.github.io/css/main.92c7e6f6f5baede55d6238ba492bcbd00e10ca39a6bbdec527692bfc9564a927.css" />
+		<link id="darkModeStyle" rel="stylesheet" type="text/css" href="https://zhuyie.github.io/css/dark.4529c04ce20ceac5a42e37a63e092c89354fbd00e6209bd2995100d61b71e8df.css" media="(prefers-color-scheme: dark)"  />
+		
+		
+		<link rel="stylesheet" type="text/css" href="https://zhuyie.github.io/css/custom.29552d0a8b23b563c10b035182a21e7eb9f79d956d4c62410864b55ed756e8ae.css">
+		
+</head>
+<body>
+        <div class="content"><header>
+	<div class="main">
+		<a href="https://zhuyie.github.io/">zhuyie&#39;s blog</a>
+	</div>
+	<nav>
+		
+		<a href="/">Home</a>
+		
+		<a href="/posts">All posts</a>
+		
+		
+	</nav>
+</header>
+
+<main>
+  <article>
+    <div class="post-container">
+      
+      <div class="post-content">
+        <div class="title">
+          <h1 class="title">从 smollm3.go 看 LLM inference</h1>
+          <div class="meta">Posted on Apr 30, 2026</div>
+        </div>
+        
+        <section class="body">
+          <p>作为某办公类 SAAS 软件公司的一员，这几年被大模型卷的死去活来。“AI一周，人间一年”真的不是笑话。不过用过了这么多AI，看过了这么多资料，对于 LLM 的具体原理还是有点雾里看花的感觉。很多年前侯捷老师说过“源码之下，了无秘密”，真正想理解透彻还得自己动手做做实现，剥开表面看底层。</p>
+<p>于是有了 <a href="https://github.com/zhuyie/smollm3.go">smollm3.go</a> ，一个简单易读的基于 golang 实现的 SmolLM3 推理引擎。它不是一个追求极限性能的 runtime，而是一个尽量保持可读的 Go 实现：包含 tokenizer、Transformer forward pass、KV cache、int8 weight-only 量化，以及少量 ARM64 SIMD 优化。正因为代码规模不大，我们可以沿着一次生成的路径，把 LLM 推理的基本部件从底层执行的角度串起来。</p>
+<h2 id="为什么是-smollm3-和-golang">为什么是 SmolLM3 和 golang</h2>
+<p>选择 <a href="https://huggingface.co/HuggingFaceTB/SmolLM3-3B">SmolLM3-3B</a> 主要是因为它足够“小”（基于CPU就能跑得动），但又相对”新“（发布于2025年7月，支持思考模式，模型能力不算太差）。</p>
+<p>3B 规模的模型已经包含现代 decoder-only LLM 的主要结构：token embedding、RMSNorm、multi-head attention、RoPE、MLP、KV cache、采样等。它不像 toy model 那样省略关键环节，也不像更大的模型那样过于复杂，容易陷到工程细节中去。</p>
+<p>选择 golang 则是另一种取舍。</p>
+<p>golang 没有 Python 生态中成熟的 tensor runtime，也没有直接把矩阵乘法交给 CUDA/cuBLAS 的便利。这意味着我们需要显式写出权重加载、内存布局、矩阵乘法、KV cache 和采样逻辑。坏处是性能上限有限；好处是很多被框架隐藏起来的推理细节会暴露出来，适合学习。</p>
+<p>项目结构大致如下：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-text" data-lang="text"><span style="display:flex;"><span>cmd/smollm3/          CLI entry point
+</span></span><span style="display:flex;"><span>internal/model/       SML3 loader, weights, KV cache, forward pass
+</span></span><span style="display:flex;"><span>internal/tokenizer/   TOK3 loader and byte-level BPE tokenizer
+</span></span><span style="display:flex;"><span>internal/sampler/     greedy, multinomial, and top-p sampling
+</span></span><span style="display:flex;"><span>tools/                Hugging Face model/tokenizer export scripts
+</span></span><span style="display:flex;"><span>docs/CHECKPOINT.md    SML3/TOK3 binary format notes
+</span></span></code></pre></div><p>如果按学习顺序读代码，我建议从 <code>cmd/smollm3/main.go</code> 开始，看完整的生成循环；再读 <code>internal/tokenizer/tokenizer.go</code>，理解文本如何变成 token；然后读 <code>internal/model/model.go</code> 里的 <code>Forward</code> 和 <code>Prefill</code>；最后再看 <code>quant.go</code>、<code>matmul.go</code> 和 <code>kernel_arm64.s</code> 中的性能优化。</p>
+<h2 id="推理到底在做什么">推理到底在做什么</h2>
+<p>一次 LLM 生成大致可以拆成下面几步：</p>
+<ol>
+<li>用户输入的字符串被 tokenizer 编码为 token ids。</li>
+<li>token id 查表得到 embedding，也就是模型内部使用的向量。</li>
+<li>向量依次经过多层 Transformer block。</li>
+<li>每层中，attention 让当前 token 读取历史 token 的信息；MLP 对信息做非线性变换。</li>
+<li>最后一层输出被投影到词表大小的 logits。</li>
+<li>sampler 根据 logits 选择下一个 token。</li>
+<li>新 token 被追加到上下文，继续下一轮。</li>
+</ol>
+<p>下面逐个看这些部件。</p>
+<h2 id="tokenization文本先变成-token-id">Tokenization：文本先变成 token id</h2>
+<p>模型本身并不直接处理字符串。它处理的是整数序列，也就是 token ids。</p>
+<p>例如：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-text" data-lang="text"><span style="display:flex;"><span>The galaxy empire
+</span></span></code></pre></div><p>经过 tokenizer 以后，可能会变成类似这样的整数序列：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-text" data-lang="text"><span style="display:flex;"><span>[1012, 5432, 9981]
+</span></span></code></pre></div><p>这里每个整数对应词表中的一个 token。token 不一定是完整单词，也可能是子词、空格加单词、标点，甚至是单个字母。</p>
+<p>smollm3.go 中的 tokenizer 是 byte-level BPE。它大致分两步：</p>
+<ol>
+<li>先做 pre-tokenization，把字符串切成若干 piece，例如单词、数字组、符号组、空白等。</li>
+<li>每个 piece 先展开成可逆的 byte token，再根据 BPE merge rank 反复合并相邻 token。</li>
+</ol>
+<p>代码主要在 <code>internal/tokenizer/tokenizer.go</code>：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">func</span> (<span style="color:#a6e22e">t</span> <span style="color:#f92672">*</span><span style="color:#a6e22e">Tokenizer</span>) <span style="color:#a6e22e">Encode</span>(<span style="color:#a6e22e">text</span> <span style="color:#66d9ef">string</span>, <span style="color:#a6e22e">bos</span> <span style="color:#66d9ef">bool</span>, <span style="color:#a6e22e">eos</span> <span style="color:#66d9ef">bool</span>) []<span style="color:#66d9ef">int</span>
+</span></span></code></pre></div><p>其中 <code>nextPiece</code> 负责 pre-tokenization，<code>encodePiece</code> 负责 byte-level BPE merge。</p>
+<p>tokenizer 的重要性经常被低估。对推理 runtime 来说，tokenizer 决定了用户输入如何进入模型，也决定了模型输出的 token id 如何还原为字符串。如果 tokenizer 和训练时不一致，即使模型权重完全正确，输出也会变得混乱。</p>
+<h2 id="自回归一次只预测下一个-token">自回归：一次只预测下一个 token</h2>
+<p>decoder-only LLM 的生成方式是自回归的。</p>
+<p>所谓自回归，就是模型每次只预测“下一个 token”。假设已有 token 序列：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-text" data-lang="text"><span style="display:flex;"><span>[x0, x1, x2, x3]
+</span></span></code></pre></div><p>模型会输出一个概率分布，用来表示下一个 token 可能是什么：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-text" data-lang="text"><span style="display:flex;"><span>P(x4 | x0, x1, x2, x3)
+</span></span></code></pre></div><p>采样得到 <code>x4</code> 后，再把它接回序列：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-text" data-lang="text"><span style="display:flex;"><span>[x0, x1, x2, x3, x4]
+</span></span></code></pre></div><p>然后继续预测：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-text" data-lang="text"><span style="display:flex;"><span>P(x5 | x0, x1, x2, x3, x4)
+</span></span></code></pre></div><p>所以从外部看，LLM 的生成循环非常简单：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">for</span> <span style="color:#a6e22e">generated</span> &lt; <span style="color:#a6e22e">maxNew</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">logits</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">model</span>.<span style="color:#a6e22e">Forward</span>(<span style="color:#a6e22e">token</span>, <span style="color:#a6e22e">pos</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">next</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">sampler</span>.<span style="color:#a6e22e">Sample</span>(<span style="color:#a6e22e">logits</span>)
+</span></span><span style="display:flex;"><span>    print(<span style="color:#a6e22e">tokenizer</span>.<span style="color:#a6e22e">Decode</span>(<span style="color:#a6e22e">next</span>))
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">token</span> = <span style="color:#a6e22e">next</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">pos</span><span style="color:#f92672">++</span>
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>smollm3.go 中的 <code>generate</code> 和 <code>generateAssistant</code> 就是在做这件事。</p>
+<p>这里的关键点是：模型并不是一次性“想好整段回答”，而是一步一步生成。我们看到的自然语言连贯性，是因为每一步的条件概率都依赖前面的上下文。</p>
+<h2 id="embeddingtoken-id-变成向量">Embedding：token id 变成向量</h2>
+<p>token id 只是整数，模型不能直接对整数做语义计算。进入 Transformer 之前，token id 会先通过 embedding table 查表变成向量。</p>
+<p>如果模型 hidden size 是 <code>Dim</code>，那么每个 token 会对应一个 <code>Dim</code> 维向量：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span>copy(<span style="color:#a6e22e">s</span>.<span style="color:#a6e22e">X</span>, <span style="color:#a6e22e">w</span>.<span style="color:#a6e22e">TokenEmbeddingTable</span>[<span style="color:#a6e22e">token</span><span style="color:#f92672">*</span><span style="color:#a6e22e">dim</span>:(<span style="color:#a6e22e">token</span><span style="color:#f92672">+</span><span style="color:#ae81ff">1</span>)<span style="color:#f92672">*</span><span style="color:#a6e22e">dim</span>])
+</span></span></code></pre></div><p>这行代码出现在 <code>Forward</code> 的开头。<code>s.X</code> 可以理解为当前 token 的 residual stream，也就是这一个位置上的隐藏状态。它会穿过所有 Transformer block，不断被 attention 和 MLP 更新。</p>
+<h2 id="transformer-block一层里发生了什么">Transformer block：一层里发生了什么</h2>
+<p>SmolLM3 和大多数现代 decoder-only LLM 一样，由多层 Transformer block 堆叠而成。每一层大致做两件事：</p>
+<ol>
+<li>self-attention：从历史 token 中读取相关信息。</li>
+<li>feed-forward network：对每个位置的隐藏状态做非线性变换。</li>
+</ol>
+<p>在 smollm3.go 中，<code>Forward</code> 的主体是一个层循环：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">for</span> <span style="color:#a6e22e">layer</span> <span style="color:#f92672">:=</span> <span style="color:#ae81ff">0</span>; <span style="color:#a6e22e">layer</span> &lt; <span style="color:#a6e22e">cfg</span>.<span style="color:#a6e22e">NLayers</span>; <span style="color:#a6e22e">layer</span><span style="color:#f92672">++</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">...</span>
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>每一层的结构大致是：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-text" data-lang="text"><span style="display:flex;"><span>x
+</span></span><span style="display:flex;"><span> ├─ RMSNorm
+</span></span><span style="display:flex;"><span> ├─ Attention(Q, K, V)
+</span></span><span style="display:flex;"><span> ├─ Residual Add
+</span></span><span style="display:flex;"><span> ├─ RMSNorm
+</span></span><span style="display:flex;"><span> ├─ SwiGLU MLP
+</span></span><span style="display:flex;"><span> └─ Residual Add
+</span></span></code></pre></div><p>Residual connection 的含义是，每个子模块不是完全替换原来的 <code>x</code>，而是在原来的基础上加上一个增量：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#a6e22e">s</span>.<span style="color:#a6e22e">X</span>[<span style="color:#a6e22e">i</span>] <span style="color:#f92672">+=</span> <span style="color:#a6e22e">s</span>.<span style="color:#a6e22e">XB2</span>[<span style="color:#a6e22e">i</span>]
+</span></span></code></pre></div><p>这种结构让多层网络更容易训练，也让信息可以沿着层数向上传递。</p>
+<h2 id="自注意力当前-token-如何回看历史">自注意力：当前 token 如何回看历史</h2>
+<p>self-attention 是 Transformer 的核心。</p>
+<p>对当前 token，模型会计算三个向量：</p>
+<ul>
+<li>Query，简称 Q：当前 token 想要查询什么。</li>
+<li>Key，简称 K：历史 token 提供什么索引。</li>
+<li>Value，简称 V：历史 token 真正携带的信息。</li>
+</ul>
+<p>在代码里，它们来自三个线性投影：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#a6e22e">matmulWeight</span>(<span style="color:#a6e22e">s</span>.<span style="color:#a6e22e">Q</span>, <span style="color:#a6e22e">s</span>.<span style="color:#a6e22e">XB</span>, <span style="color:#a6e22e">lw</span>.<span style="color:#a6e22e">WQ</span>, <span style="color:#a6e22e">lw</span>.<span style="color:#a6e22e">QWQ</span>, <span style="color:#a6e22e">dim</span>, <span style="color:#a6e22e">dim</span>)
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">matmulWeight</span>(<span style="color:#a6e22e">kcache</span>, <span style="color:#a6e22e">s</span>.<span style="color:#a6e22e">XB</span>, <span style="color:#a6e22e">lw</span>.<span style="color:#a6e22e">WK</span>, <span style="color:#a6e22e">lw</span>.<span style="color:#a6e22e">QWK</span>, <span style="color:#a6e22e">dim</span>, <span style="color:#a6e22e">kvDim</span>)
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">matmulWeight</span>(<span style="color:#a6e22e">vcache</span>, <span style="color:#a6e22e">s</span>.<span style="color:#a6e22e">XB</span>, <span style="color:#a6e22e">lw</span>.<span style="color:#a6e22e">WV</span>, <span style="color:#a6e22e">lw</span>.<span style="color:#a6e22e">QWV</span>, <span style="color:#a6e22e">dim</span>, <span style="color:#a6e22e">kvDim</span>)
+</span></span></code></pre></div><p>然后当前 token 的 Q 会和历史所有 token 的 K 做点积，得到 attention score：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#a6e22e">att</span>[<span style="color:#a6e22e">ts</span>] = <span style="color:#a6e22e">dotF32</span>(<span style="color:#a6e22e">q</span>, <span style="color:#a6e22e">k</span>) <span style="color:#f92672">*</span> <span style="color:#a6e22e">attScale</span>
+</span></span></code></pre></div><p>score 经过 softmax 变成概率分布：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#a6e22e">softmax</span>(<span style="color:#a6e22e">att</span>[:<span style="color:#a6e22e">pos</span><span style="color:#f92672">+</span><span style="color:#ae81ff">1</span>])
+</span></span></code></pre></div><p>最后用这个概率分布加权求和历史 token 的 V：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#a6e22e">addScaledF32</span>(<span style="color:#a6e22e">xb</span>, <span style="color:#a6e22e">v</span>, <span style="color:#a6e22e">a</span>)
+</span></span></code></pre></div><p>直观地说，attention 让当前 token 可以“回看”上下文中相关的位置。比如在回答“巴黎是哪个国家的首都”时，生成“法国”这个 token 时，模型可能会对“巴黎”“首都”等 token 给予更高 attention 权重。</p>
+<h2 id="位置编码为什么模型知道顺序">位置编码：为什么模型知道顺序</h2>
+<p>attention 本身只看 token 之间的相似度，并不天然知道顺序。也就是说，如果没有额外处理，模型很难区分：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-text" data-lang="text"><span style="display:flex;"><span>dog bites man
+</span></span><span style="display:flex;"><span>man bites dog
+</span></span></code></pre></div><p>为了解决这个问题，Transformer 需要注入位置信息。</p>
+<p>SmolLM3 使用 RoPE，也就是 Rotary Positional Embedding。RoPE 的做法不是把位置向量直接加到 hidden state 上，而是在 Q/K 向量的二维平面中做旋转。不同位置使用不同旋转角度，因此点积结果会携带相对位置信息。</p>
+<p>在 smollm3.go 中，RoPE 的 sin/cos 表会提前构建：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#a6e22e">ropeCos</span>, <span style="color:#a6e22e">ropeSin</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">buildRopeTables</span>(<span style="color:#a6e22e">cfg</span>.<span style="color:#a6e22e">SeqLen</span>, <span style="color:#a6e22e">headSize</span>, <span style="color:#a6e22e">cfg</span>.<span style="color:#a6e22e">RopeTheta</span>)
+</span></span></code></pre></div><p>推理时，根据当前位置取出对应的 cos/sin，然后旋转 Q 和 K：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#a6e22e">vec</span>[<span style="color:#a6e22e">i</span>] = <span style="color:#a6e22e">v0</span><span style="color:#f92672">*</span><span style="color:#a6e22e">fcr</span> <span style="color:#f92672">-</span> <span style="color:#a6e22e">v1</span><span style="color:#f92672">*</span><span style="color:#a6e22e">fci</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">vec</span>[<span style="color:#a6e22e">i</span><span style="color:#f92672">+</span><span style="color:#ae81ff">1</span>] = <span style="color:#a6e22e">v0</span><span style="color:#f92672">*</span><span style="color:#a6e22e">fci</span> <span style="color:#f92672">+</span> <span style="color:#a6e22e">v1</span><span style="color:#f92672">*</span><span style="color:#a6e22e">fcr</span>
+</span></span></code></pre></div><p>SmolLM3 还有一个细节：不是所有层都使用 RoPE。它有 RoPE/NoPE 的层模式，因此 checkpoint 里保存了 <code>RopeLayers</code>。这也是模型结构的一部分，而不是运行时随便调的参数。</p>
+<h2 id="多头注意力并行看不同关系">多头注意力：并行看不同关系</h2>
+<p>单个 attention 可以看作一种“查询方式”。多头注意力则是把 hidden state 切成多个 head，让不同 head 并行关注不同关系。</p>
+<p>例如某些 head 可能更关注语法关系，某些 head 更关注实体引用，某些 head 更关注局部上下文。这里不必把每个 head 解释得过于拟人化，但可以把它理解为多组不同的投影空间。</p>
+<p>代码中：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">for</span> <span style="color:#a6e22e">h</span> <span style="color:#f92672">:=</span> <span style="color:#ae81ff">0</span>; <span style="color:#a6e22e">h</span> &lt; <span style="color:#a6e22e">cfg</span>.<span style="color:#a6e22e">NHeads</span>; <span style="color:#a6e22e">h</span><span style="color:#f92672">++</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">q</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">s</span>.<span style="color:#a6e22e">Q</span>[<span style="color:#a6e22e">h</span><span style="color:#f92672">*</span><span style="color:#a6e22e">headSize</span> : (<span style="color:#a6e22e">h</span><span style="color:#f92672">+</span><span style="color:#ae81ff">1</span>)<span style="color:#f92672">*</span><span style="color:#a6e22e">headSize</span>]
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">...</span>
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>每个 head 都有自己的 Q 切片，分别对历史 K/V 做 attention。</p>
+<p>SmolLM3 使用 grouped-query attention，也就是 <code>NKVHeads</code> 可以小于 <code>NHeads</code>。多个 query head 会共享同一组 K/V head：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#a6e22e">kvHead</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">h</span> <span style="color:#f92672">/</span> <span style="color:#a6e22e">kvMul</span>
+</span></span></code></pre></div><p>这样可以减少 KV cache 的体积。对推理来说，KV cache 是很大的内存开销，减少 K/V head 数量可以显著节省内存。</p>
+<h2 id="多层堆叠从局部模式到复杂语义">多层堆叠：从局部模式到复杂语义</h2>
+<p>一层 Transformer block 的输出会成为下一层的输入。多层堆叠后，模型可以逐步构造越来越抽象的信息。</p>
+<p>第一层可能更接近 token 表面形式，后面的层逐渐形成语法、实体、关系、任务意图等更复杂的表示。推理代码里看不到这些语义概念，它只是在不断做矩阵乘法、attention、激活函数和残差相加。但从训练结果看，这些数值运算最终形成了有用的语言行为。</p>
+<p>这也是读推理代码时容易产生的一种反差：代码层面非常机械，行为层面却像是在理解语言。</p>
+<h2 id="采样从-logits-到下一个-token">采样：从 logits 到下一个 token</h2>
+<p>模型最后会输出一个长度等于词表大小的向量，叫 logits：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#a6e22e">matmulWeight</span>(<span style="color:#a6e22e">s</span>.<span style="color:#a6e22e">Logits</span>, <span style="color:#a6e22e">s</span>.<span style="color:#a6e22e">X</span>, <span style="color:#a6e22e">w</span>.<span style="color:#a6e22e">WCls</span>, <span style="color:#a6e22e">w</span>.<span style="color:#a6e22e">QWCls</span>, <span style="color:#a6e22e">dim</span>, <span style="color:#a6e22e">cfg</span>.<span style="color:#a6e22e">VocabSize</span>)
+</span></span></code></pre></div><p>如果词表有 128000 个 token，那么 logits 就有 128000 个数。每个数对应一个 token 的未归一化分数。</p>
+<p>采样器会把 logits 转成概率分布，然后选择下一个 token。smollm3.go 支持几种常见策略：</p>
+<ul>
+<li><code>temperature == 0</code> 时，直接 greedy，选择分数最高的 token。</li>
+<li><code>temperature &gt; 0</code> 时，先做 softmax，再按概率采样。</li>
+<li>如果启用 top-p，则只在累计概率达到 p 的候选集合里采样。</li>
+</ul>
+<p>代码在 <code>internal/sampler/sampler.go</code>：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">func</span> (<span style="color:#a6e22e">s</span> <span style="color:#f92672">*</span><span style="color:#a6e22e">Sampler</span>) <span style="color:#a6e22e">Sample</span>(<span style="color:#a6e22e">logits</span> []<span style="color:#66d9ef">float32</span>) <span style="color:#66d9ef">int</span>
+</span></span></code></pre></div><p>temperature 控制随机性。temperature 越低，分布越尖锐，输出越稳定；temperature 越高，分布越平，输出越发散。</p>
+<p>top-p 则控制候选集合。它不是固定取 top-k 个 token，而是取累计概率达到 p 的最小集合。这样在模型很确定时候选少，在模型不确定时候选多。</p>
+<h2 id="prefill-和-decode">Prefill 和 Decode</h2>
+<p>LLM 推理通常分为两个阶段：prefill 和 decode。</p>
+<p>这两个阶段都在跑同一个模型，但工作模式很不一样。</p>
+<h2 id="prefill一次吃掉-prompt">Prefill：一次吃掉 prompt</h2>
+<p>Prefill 处理的是已有 prompt。</p>
+<p>假设 prompt 有 512 个 token，那么这些 token 都已经确定。runtime 可以一次性把它们送进模型，填充每一层的 KV cache，并得到“第 513 个 token”的 logits。</p>
+<p>在 smollm3.go 中，<code>Prefill</code> 的签名是：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">func</span> (<span style="color:#a6e22e">t</span> <span style="color:#f92672">*</span><span style="color:#a6e22e">Transformer</span>) <span style="color:#a6e22e">Prefill</span>(<span style="color:#a6e22e">tokens</span> []<span style="color:#66d9ef">int</span>, <span style="color:#a6e22e">startPos</span> <span style="color:#66d9ef">int</span>) []<span style="color:#66d9ef">float32</span>
+</span></span></code></pre></div><p>它接收一段连续 token，把它们从 <code>startPos</code> 开始写入 KV cache。</p>
+<p>Prefill 更像批处理。它的重点是吞吐：一次处理多个 prompt token，尽量把矩阵乘法做成 batch 形式。</p>
+<h2 id="decode一个-token-一个-token-地生成">Decode：一个 token 一个 token 地生成</h2>
+<p>Decode 处理的是生成阶段。</p>
+<p>生成阶段每一轮只有一个新 token。模型不需要重新计算整个 prompt 的 K/V，而是复用 prefill 阶段留下的 KV cache，只为新 token 计算新的 Q/K/V，并把新的 K/V 追加到 cache 末尾。</p>
+<p>在 smollm3.go 中，单 token decode 对应：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">func</span> (<span style="color:#a6e22e">t</span> <span style="color:#f92672">*</span><span style="color:#a6e22e">Transformer</span>) <span style="color:#a6e22e">Forward</span>(<span style="color:#a6e22e">token</span> <span style="color:#66d9ef">int</span>, <span style="color:#a6e22e">pos</span> <span style="color:#66d9ef">int</span>) []<span style="color:#66d9ef">float32</span>
+</span></span></code></pre></div><p><code>Forward</code> 的输入是当前位置的 token id 和绝对位置 <code>pos</code>，输出是下一个 token 的 logits。</p>
+<p>因此 decode 更像在线循环：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-text" data-lang="text"><span style="display:flex;"><span>new token -&gt; Forward -&gt; logits -&gt; sample -&gt; next token -&gt; Forward -&gt; ...
+</span></span></code></pre></div><h2 id="kv-cache两者衔接的关键">KV cache：两者衔接的关键</h2>
+<p>如果没有 KV cache，生成第 n 个 token 时，模型需要重新计算前面所有 token 的 K/V。这样生成越长，重复计算越多。</p>
+<p>KV cache 的思路很简单：历史 token 的 K/V 一旦算出来，就存起来。后续 token 做 attention 时，直接读取历史 K/V。</p>
+<p>smollm3.go 中 KV cache 的布局是：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-text" data-lang="text"><span style="display:flex;"><span>[layer][position][kvDim]
+</span></span></code></pre></div><p>也就是每一层、每个位置，都有自己的 K/V 向量。</p>
+<p>在 decode 阶段，新 token 的 K/V 会被写到当前位置：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#a6e22e">kcache</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">s</span>.<span style="color:#a6e22e">KeyCache</span>[<span style="color:#a6e22e">loff</span><span style="color:#f92672">+</span><span style="color:#a6e22e">pos</span><span style="color:#f92672">*</span><span style="color:#a6e22e">kvDim</span> : <span style="color:#a6e22e">loff</span><span style="color:#f92672">+</span>(<span style="color:#a6e22e">pos</span><span style="color:#f92672">+</span><span style="color:#ae81ff">1</span>)<span style="color:#f92672">*</span><span style="color:#a6e22e">kvDim</span>]
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">vcache</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">s</span>.<span style="color:#a6e22e">ValueCache</span>[<span style="color:#a6e22e">loff</span><span style="color:#f92672">+</span><span style="color:#a6e22e">pos</span><span style="color:#f92672">*</span><span style="color:#a6e22e">kvDim</span> : <span style="color:#a6e22e">loff</span><span style="color:#f92672">+</span>(<span style="color:#a6e22e">pos</span><span style="color:#f92672">+</span><span style="color:#ae81ff">1</span>)<span style="color:#f92672">*</span><span style="color:#a6e22e">kvDim</span>]
+</span></span></code></pre></div><p>然后当前 token 的 Q 会和 <code>[0, pos]</code> 范围内所有历史 K 做 attention。</p>
+<p>所以 prefill 和 decode 的区别可以总结为：</p>
+<ul>
+<li>prefill：已有 prompt，批量填充 KV cache。</li>
+<li>decode：逐 token 生成，复用 KV cache。</li>
+<li>KV cache：连接两者的状态。</li>
+</ul>
+<h2 id="smollm3go-里的性能优化">smollm3.go 里的性能优化</h2>
+<p>smollm3.go 的优化都比较朴素，但它们对应了 LLM 推理中最核心的瓶颈。</p>
+<h2 id="连续内存和-row-major-权重">连续内存和 row-major 权重</h2>
+<p>模型权重被导出为简单的二进制格式。矩阵按 row-major 存储，每个输出通道对应一整行权重。</p>
+<p>这样一次矩阵乘法可以被理解为很多个 dot product：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-text" data-lang="text"><span style="display:flex;"><span>out[row] = dot(x, weight[row])
+</span></span></code></pre></div><p>这个表示方式非常适合手写 runtime。代码不需要通用 tensor abstraction，也不需要处理复杂 stride。代价是灵活性较低，但可读性很好。</p>
+<h2 id="batched-prefill">Batched prefill</h2>
+<p>Prefill 阶段一次处理多个 prompt token，因此项目里有 batch matmul 路径：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#a6e22e">matmulBatchWeight</span>(<span style="color:#f92672">...</span>)
+</span></span></code></pre></div><p>它把多个 token 的 hidden states 作为 batch 输入，按输出行计算多个 dot product。</p>
+<p>这不等于完整深度学习框架里的高性能 GEMM，但对于一个小 runtime 来说，它已经能避免把 prompt token 完全逐个走 decode 路径。</p>
+<h2 id="kv-cache">KV cache</h2>
+<p>KV cache 是推理优化里最重要的一项。它不是“让单次矩阵乘法更快”，而是避免重复计算。</p>
+<p>没有 KV cache，生成每个新 token 都要重新处理整个上下文。有了 KV cache，decode 阶段只需要为新 token 计算新的 K/V，并读取历史缓存。</p>
+<p>这也是为什么 decode 的性能通常用 tok/s 衡量：每一步推进一个 token，关键路径固定包含所有层的一次单 token forward。</p>
+<h2 id="int8-weight-only-quantization">int8 weight-only quantization</h2>
+<p>模型大部分体积来自权重。FP32 每个权重 4 字节，int8 每个权重 1 字节。smollm3.go 支持 weight-only int8 quantization：权重压成 int8，activation 仍然使用 float32。</p>
+<p>导出脚本会为每一行权重计算一个 scale：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-text" data-lang="text"><span style="display:flex;"><span>scale[row] = max(abs(row)) / 127
+</span></span></code></pre></div><p>量化后的权重保存为：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-text" data-lang="text"><span style="display:flex;"><span>int8[rows * inputs] + float32[rows] scales
+</span></span></code></pre></div><p>推理时，点积大致是：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-text" data-lang="text"><span style="display:flex;"><span>dot(float32 activation, int8 weight) * scale[row]
+</span></span></code></pre></div><p>这种方式很容易理解，也比较容易实现。它不能像更复杂的量化方案那样榨干性能，但已经能显著降低模型文件大小，并改善 decode 阶段的内存带宽压力。</p>
+<p>从 README 中的参考 benchmark 可以看到，在 Apple M2 Max 上，int8 对 decode 阶段提升明显：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-text" data-lang="text"><span style="display:flex;"><span>Decode at 128-token context: FP32 6.85 tok/s, Int8 15.42 tok/s
+</span></span><span style="display:flex;"><span>Decode at 512-token context: FP32 6.45 tok/s, Int8 13.43 tok/s
+</span></span></code></pre></div><h2 id="arm64-simd">ARM64 SIMD</h2>
+<p>dot product 是推理中最频繁的操作之一。Go 编译器本身不会自动把所有这些循环变成理想的 SIMD 指令，因此项目里为 ARM64 写了少量汇编。</p>
+<p>包括：</p>
+<ul>
+<li><code>dotF32ARM64</code></li>
+<li><code>dotF32Batch4ARM64</code></li>
+<li><code>dotF32Int8ARM64</code></li>
+<li><code>addScaledF32ARM64</code></li>
+</ul>
+<p>Go 侧 wrapper 会在向量长度足够大、且满足对齐条件时调用汇编实现，否则回退到 scalar 实现。</p>
+<p>这种设计有两个好处：</p>
+<ol>
+<li>热路径可以用 SIMD 加速。</li>
+<li>非 ARM64 平台仍然可以使用 generic Go 实现。</li>
+</ol>
+<h2 id="worker-pool-并行-matmul">worker pool 并行 matmul</h2>
+<p>较大的矩阵乘法会按输出行切分，然后分发到固定 worker pool。</p>
+<p>这样做的原因是：一次 <code>out = W*x</code> 中，每个输出行之间彼此独立。不同 worker 可以分别计算不同的 row range，最后写入同一个输出切片的不同区域。</p>
+<p>项目没有为每次 matmul 临时创建 goroutine，而是使用全局 worker pool，避免在 decode 热路径里频繁创建和销毁 goroutine。</p>
+<p>这不是最复杂的调度方案，但足够直接，也符合项目的学习目标。</p>
+<h2 id="小结">小结</h2>
+<p>从推理视角看，大语言模型并不是一个不可拆解的黑盒。至少在 decoder-only 模型上，它的主循环相当清晰：</p>
+<ol>
+<li>文本变成 token。</li>
+<li>token 变成向量。</li>
+<li>向量经过多层 attention 和 MLP。</li>
+<li>最后一层输出 logits。</li>
+<li>sampler 选择下一个 token。</li>
+<li>新 token 接回上下文，继续生成。</li>
+</ol>
+<p>真正让系统变复杂的，是规模和效率：如何组织权重，如何避免重复计算，如何利用缓存，如何减少内存带宽，如何在不同硬件上写出合适的 kernel。</p>
+<p>仍然不那么清晰的，还是这么一个“简单”的东西，为什么能那么“聪明”，以及碳基生命何时被硅基生命全面超越的问题&hellip;</p>
+
+        </section>
+        <div class="post-tags">
+          
+          
+          
+        </div>
+      </div>
+
+      
+      
+    </div>
+
+    </article>
+</main>
+<footer>
+  <div style="display:flex"><a class="soc" href="https://github.com/zhuyie" rel="me" title="GitHub"><svg class="feather">
+       <use href="/svg/feather-sprite.51cf5647cb1987f769b616558f2620fd9423d72058490231b391bf6aa3744b55.svg#github" />
+    </svg></a><a class="border"></a></div>
+  <div class="footer-info">
+    2026  © zhuyie |  <a
+      href="https://github.com/athul/archie">Archie Theme</a> | Built with <a href="https://gohugo.io">Hugo</a>
+  </div>
+</footer>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-LK9RXPY8YE"></script>
+      <script>
+        var doNotTrack = false;
+        if ( true ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-LK9RXPY8YE');
+        }
+      </script>
+
+</div>
+    </body>
+</html>
